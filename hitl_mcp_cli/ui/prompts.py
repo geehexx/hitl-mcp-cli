@@ -11,8 +11,22 @@ from InquirerPy import inquirer
 from InquirerPy.validator import PathValidator
 from rich.console import Console
 from rich.panel import Panel
+from rich.text import Text
 
 console = Console()
+
+# Icons for different prompt types
+ICONS = {
+    "text": "✏️ ",
+    "select": "🎯",
+    "checkbox": "☑️ ",
+    "confirm": "❓",
+    "path": "📁",
+    "success": "✅",
+    "info": "ℹ️ ",
+    "warning": "⚠️ ",
+    "error": "❌",
+}
 
 
 def sync_to_async(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -36,15 +50,20 @@ def prompt_text(
             return bool(re.match(validate_pattern, text))
         return True
 
+    # Add icon to prompt
+    formatted_prompt = f"{ICONS['text']} {prompt}"
+
     if multiline:
-        console.print(
-            Panel(f"[bold cyan]{prompt}[/bold cyan]\n(Press Esc+Enter to submit)", border_style="cyan")
-        )
+        panel_text = Text()
+        panel_text.append(ICONS["text"], style="bold cyan")
+        panel_text.append(prompt, style="bold cyan")
+        panel_text.append("\n(Press Esc+Enter to submit)", style="dim italic")
+        console.print(Panel(panel_text, border_style="cyan", padding=(1, 2)))
         result: str = inquirer.text(
             message="", default=default or "", multiline=True, validate=validator
         ).execute()
     else:
-        result = inquirer.text(message=prompt, default=default or "", validate=validator).execute()
+        result = inquirer.text(message=formatted_prompt, default=default or "", validate=validator).execute()
 
     return result
 
@@ -52,21 +71,24 @@ def prompt_text(
 @sync_to_async
 def prompt_select(prompt: str, choices: list[str], default: str | None = None) -> str:
     """Prompt for single selection."""
-    result: str = inquirer.select(message=prompt, choices=choices, default=default).execute()
+    formatted_prompt = f"{ICONS['select']} {prompt}"
+    result: str = inquirer.select(message=formatted_prompt, choices=choices, default=default).execute()
     return result
 
 
 @sync_to_async
 def prompt_checkbox(prompt: str, choices: list[str]) -> list[str]:
     """Prompt for multiple selections."""
-    result: list[str] = inquirer.checkbox(message=prompt, choices=choices).execute()
+    formatted_prompt = f"{ICONS['checkbox']} {prompt}"
+    result: list[str] = inquirer.checkbox(message=formatted_prompt, choices=choices).execute()
     return result
 
 
 @sync_to_async
 def prompt_confirm(prompt: str, default: bool = False) -> bool:
     """Prompt for yes/no confirmation."""
-    result: bool = inquirer.confirm(message=prompt, default=default).execute()
+    formatted_prompt = f"{ICONS['confirm']} {prompt}"
+    result: bool = inquirer.confirm(message=formatted_prompt, default=default).execute()
     return result
 
 
@@ -84,7 +106,8 @@ def prompt_path(
         else:
             validator = PathValidator(message="Path must exist")
 
-    result = inquirer.filepath(message=prompt, default=default or "", validate=validator).execute()
+    formatted_prompt = f"{ICONS['path']} {prompt}"
+    result = inquirer.filepath(message=formatted_prompt, default=default or "", validate=validator).execute()
     return str(Path(result).expanduser().resolve())
 
 
@@ -92,6 +115,13 @@ def display_notification(title: str, message: str, notification_type: str = "inf
     """Display formatted notification panel."""
     color_map = {"success": "green", "info": "blue", "warning": "yellow", "error": "red"}
     color = color_map.get(notification_type, "blue")
+    icon = ICONS.get(notification_type, ICONS["info"])
 
-    panel = Panel(message, title=f"[bold {color}]{title}[/bold {color}]", border_style=color, padding=(1, 2))
+    # Create rich text for title with icon
+    title_text = Text()
+    title_text.append(icon, style=f"bold {color}")
+    title_text.append(title, style=f"bold {color}")
+
+    panel = Panel(message, title=title_text, border_style=color, padding=(1, 2))
     console.print(panel)
+    console.print()  # Add spacing after notification
