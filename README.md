@@ -8,10 +8,12 @@
 ## Features
 
 - 🎯 **5 Interactive Tools**: Text input, selection, confirmation, path input, and notifications
-- 🎨 **Rich Terminal UI**: Beautiful prompts with InquirerPy and Rich formatting
+- 🎨 **Rich Terminal UI**: Beautiful prompts with icons, gradients, and animations
+- 🚀 **Custom Startup Banner**: Animated gradient banner with server info
 - 🔌 **MCP Standard**: Streamable-HTTP transport for seamless AI agent integration
 - ⚡ **Fast & Lightweight**: Minimal dependencies, async-first design
 - 🛡️ **Type-Safe**: Full type hints for IDE support and reliability
+- ✨ **Visual Feedback**: Loading indicators and status messages for better UX
 
 ## Quick Start
 
@@ -41,6 +43,10 @@ hitl-mcp
 
 # Custom host/port
 hitl-mcp --host 0.0.0.0 --port 8080
+
+# Disable banner or animation
+hitl-mcp --no-banner
+hitl-mcp --no-animation
 ```
 
 ### Configure Your AI Agent
