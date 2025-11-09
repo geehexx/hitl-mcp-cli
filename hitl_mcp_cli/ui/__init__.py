@@ -1,5 +1,6 @@
 """UI components for interactive prompts."""
 
+from .banner import display_banner
 from .prompts import (
     display_notification,
     prompt_checkbox,
@@ -16,4 +17,5 @@ __all__ = [
     "prompt_confirm",
     "prompt_path",
     "display_notification",
+    "display_banner",
 ]
