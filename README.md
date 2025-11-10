@@ -70,6 +70,14 @@ HITL MCP CLI provides a **standardized, elegant interface** for AI agents to req
 
 ---
 
+## ⚠️ Critical Configuration
+
+**Timeout Setting Required**: HITL operations require **infinite timeout** because human response time is unpredictable. Without this, tool calls will fail after 60 seconds.
+
+Set `"timeout": 0` in your MCP client configuration (see below).
+
+---
+
 ## 🚀 Quick Start
 
 ### Installation
@@ -94,9 +102,22 @@ hitl-mcp
 # Custom host/port
 hitl-mcp --host 0.0.0.0 --port 8080
 
-# Disable animations for faster startup
-hitl-mcp --no-animation
+# Disable banner
+hitl-mcp --no-banner
+
+# Using environment variables
+export HITL_HOST=0.0.0.0
+export HITL_PORT=8080
+export HITL_LOG_LEVEL=INFO
+export HITL_NO_BANNER=true
+hitl-mcp
 ```
+
+**Environment Variables**:
+- `HITL_HOST`: Server host (default: 127.0.0.1)
+- `HITL_PORT`: Server port (default: 5555)
+- `HITL_LOG_LEVEL`: Logging level - DEBUG, INFO, WARNING, ERROR (default: ERROR)
+- `HITL_NO_BANNER`: Disable startup banner - true/false (default: false)
 
 ### Configure Your AI Agent
 
@@ -107,11 +128,14 @@ Add to your MCP client configuration (e.g., Claude Desktop, Cline):
   "mcpServers": {
     "hitl": {
       "url": "http://127.0.0.1:5555/mcp",
-      "transport": "streamable-http"
+      "transport": "streamable-http",
+      "timeout": 0
     }
   }
 }
 ```
+
+**⚠️ Important**: Set `"timeout": 0` for infinite timeout. Human input is unpredictable - users may take seconds or minutes to respond. The default 60-second MCP timeout will cause tool calls to fail if users don't respond quickly enough.
 
 **That's it!** Your AI agent can now request human input.
 
@@ -469,7 +493,74 @@ npx @modelcontextprotocol/inspector hitl-mcp
 
 - **[Architecture](docs/ARCHITECTURE.md)**: System design and component details
 - **[Testing Guide](docs/TESTING.md)**: Comprehensive testing documentation
+- **[Future Enhancements](docs/FUTURE.md)**: Planned improvements and ideas
 - **[Changelog](CHANGELOG.md)**: Version history and changes
+
+---
+
+## 🔧 Troubleshooting
+
+### Tool Calls Timeout After 60 Seconds
+
+**Problem**: Tools fail with "Request timed out" error when user takes longer than 60 seconds to respond.
+
+**Solution**: Set `"timeout": 0` in your MCP client configuration:
+
+```json
+{
+  "mcpServers": {
+    "hitl": {
+      "url": "http://127.0.0.1:5555/mcp",
+      "transport": "streamable-http",
+      "timeout": 0
+    }
+  }
+}
+```
+
+**Why**: The MCP protocol has a default 60-second timeout. Human input is unpredictable - users may need minutes to make decisions. Setting timeout to 0 means infinite wait.
+
+### Server Won't Start
+
+**Problem**: Port already in use.
+
+**Solution**: Either stop the other process using port 5555, or start the server on a different port:
+
+```bash
+hitl-mcp --port 8080
+```
+
+Don't forget to update your MCP client configuration to match the new port.
+
+### Tools Not Appearing in Agent
+
+**Problem**: Agent doesn't see the HITL tools.
+
+**Solution**:
+1. Verify the server is running (`hitl-mcp` should show startup banner)
+2. Check your MCP client configuration file location
+3. Restart your MCP client (e.g., Claude Desktop) after configuration changes
+4. Verify the URL matches: `http://127.0.0.1:5555/mcp`
+
+### GET /mcp Returns 400 Bad Request
+
+**Problem**: Seeing `"GET /mcp HTTP/1.1" 400 Bad Request` in logs.
+
+**Solution**: This is **expected behavior**. The MCP endpoint only accepts POST requests with JSON-RPC messages. GET requests are not part of the MCP protocol and will return 400. This typically happens when:
+- A browser tries to access the endpoint
+- A health check system uses GET instead of POST
+- An agent incorrectly probes the endpoint
+
+If you need a health check endpoint, this is tracked in docs/FUTURE.md as a future enhancement.
+
+### Verbose Server Logs
+
+**Problem**: Too many INFO logs from uvicorn ("Started server process", "Waiting for application startup", etc.)
+
+**Solution**: The default log level is ERROR, which suppresses these messages. If you're seeing them:
+1. Check if `HITL_LOG_LEVEL` environment variable is set to INFO or DEBUG
+2. Access logs only appear when `HITL_LOG_LEVEL=DEBUG`
+3. To completely silence the server: `HITL_LOG_LEVEL=ERROR hitl-mcp --no-banner`
 
 ---
 

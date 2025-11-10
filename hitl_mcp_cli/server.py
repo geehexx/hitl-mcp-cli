@@ -78,6 +78,7 @@ async def request_text_input(
         default: Pre-filled value the user can accept or modify
         multiline: Enable for longer text like descriptions or code snippets
         validate_pattern: Regex pattern to ensure input format (e.g., r"^[a-z0-9-]+$" for slugs)
+                         Keep patterns simple to avoid performance issues. Avoid nested quantifiers.
 
     Returns:
         The user's text input

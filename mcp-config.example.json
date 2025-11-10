@@ -1,10 +1,10 @@
 {
   "mcpServers": {
-    "interactive-input": {
-      "transport": "sse",
-      "url": "http://127.0.0.1:5555/sse",
-      "timeout": 300,
-      "description": "Interactive user input server for human-in-the-loop workflows"
+    "hitl": {
+      "url": "http://127.0.0.1:5555/mcp",
+      "transport": "streamable-http",
+      "timeout": 0,
+      "description": "Human-in-the-loop interactive input server (timeout=0 means infinite)"
     }
   }
 }
