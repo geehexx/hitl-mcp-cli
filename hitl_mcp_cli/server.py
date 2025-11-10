@@ -70,14 +70,24 @@ async def request_text_input(
 ) -> str:
     """Request text input from the user.
 
+    Use this when you need free-form text input like names, descriptions, or configuration values.
+    Perfect for collecting information that doesn't fit predefined choices.
+
     Args:
-        prompt: The question/prompt to display to the user
-        default: Optional default value
-        multiline: If True, allow multi-line input (text editor style)
-        validate_pattern: Optional regex pattern for validation
+        prompt: Clear, specific question to ask the user
+        default: Pre-filled value the user can accept or modify
+        multiline: Enable for longer text like descriptions or code snippets
+        validate_pattern: Regex pattern to ensure input format (e.g., r"^[a-z0-9-]+$" for slugs)
 
     Returns:
         The user's text input
+
+    Example:
+        name = await request_text_input(
+            prompt="What should we name this project?",
+            default="my-project",
+            validate_pattern=r"^[a-z0-9-]+$"
+        )
     """
     try:
         result: str = await prompt_text(prompt, default, multiline, validate_pattern)
@@ -92,16 +102,26 @@ async def request_text_input(
 async def request_selection(
     prompt: str, choices: list[str], default: str | None = None, allow_multiple: bool = False
 ) -> str | list[str]:
-    """Request user to select from a list of options.
+    """Request user to select from predefined options.
+
+    Use this when presenting multiple approaches, configurations, or options where the user
+    should choose. Much better UX than free-form text when options are known.
 
     Args:
-        prompt: The question to display
-        choices: List of options to choose from
-        default: Default selection (if applicable)
-        allow_multiple: If True, allow multiple selections (checkbox), else single (radio)
+        prompt: Clear question explaining what to choose
+        choices: List of options (be descriptive, e.g., "Option A: Fast but risky")
+        default: Pre-selected option for convenience
+        allow_multiple: Enable checkbox mode for selecting multiple items
 
     Returns:
-        Selected choice(s) - string for single, list for multiple
+        Selected choice (string) or choices (list) if allow_multiple=True
+
+    Example:
+        env = await request_selection(
+            prompt="Which environment should I deploy to?",
+            choices=["Development", "Staging", "Production"],
+            default="Staging"
+        )
     """
     try:
         if allow_multiple:
@@ -119,12 +139,23 @@ async def request_selection(
 async def request_confirmation(prompt: str, default: bool = False) -> bool:
     """Request yes/no confirmation from the user.
 
+    Use this before destructive operations, expensive API calls, or whenever you need
+    explicit approval. Always explain what will happen if they confirm.
+
     Args:
-        prompt: The yes/no question
-        default: Default answer if user just presses enter
+        prompt: Clear yes/no question explaining the action (e.g., "Delete 50 files?")
+        default: Default answer - use False for destructive operations
 
     Returns:
-        Boolean confirmation result
+        True if user confirms, False otherwise
+
+    Example:
+        confirmed = await request_confirmation(
+            prompt="I will delete 50 unused dependencies. Proceed?",
+            default=False
+        )
+        if confirmed:
+            # Proceed with operation
     """
     try:
         result: bool = await prompt_confirm(prompt, default)
@@ -144,14 +175,25 @@ async def request_path_input(
 ) -> str:
     """Request file/directory path from user with validation.
 
+    Use this for selecting config files, output directories, or any filesystem paths.
+    Provides path completion and validation for better UX.
+
     Args:
-        prompt: The prompt message
-        path_type: Type of path expected
-        must_exist: Whether path must exist
-        default: Default path
+        prompt: Clear question about what path is needed
+        path_type: "file" for files, "directory" for folders, "any" for either
+        must_exist: Validate that path exists (use False if you'll create it)
+        default: Pre-filled path for convenience
 
     Returns:
-        Validated path string
+        Absolute, resolved path string
+
+    Example:
+        config = await request_path_input(
+            prompt="Select configuration file:",
+            path_type="file",
+            must_exist=True,
+            default="./config.yaml"
+        )
     """
     try:
         result: str = await prompt_path(prompt, path_type, must_exist, default)
@@ -166,15 +208,25 @@ async def request_path_input(
 async def notify_completion(
     title: str, message: str, notification_type: Literal["success", "info", "warning", "error"] = "info"
 ) -> dict[str, bool]:
-    """Display a completion notification to the user.
+    """Display a styled notification to the user.
+
+    Use this to confirm successful operations, report errors, or highlight important
+    information. Great for providing feedback after completing tasks.
 
     Args:
-        title: Notification title
-        message: Notification message
-        notification_type: Visual style of notification
+        title: Short, clear title (e.g., "Deployment Complete")
+        message: Detailed message (supports multi-line with \n)
+        notification_type: "success" (green), "info" (blue), "warning" (yellow), "error" (red)
 
     Returns:
-        Dict with 'acknowledged' key
+        Dict with 'acknowledged' key (always True)
+
+    Example:
+        await notify_completion(
+            title="Deployment Complete",
+            message="Successfully deployed v2.1.0 to production\n\nURL: https://app.example.com",
+            notification_type="success"
+        )
     """
     try:
         display_notification(title, message, notification_type)
