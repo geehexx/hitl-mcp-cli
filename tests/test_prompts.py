@@ -1,8 +1,7 @@
 """Tests for prompt functions with minimal mocking."""
 
-import re
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 

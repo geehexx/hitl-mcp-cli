@@ -4,8 +4,6 @@ import subprocess
 import sys
 from unittest.mock import patch
 
-import pytest
-
 
 def test_cli_help() -> None:
     """Test CLI help message."""
@@ -20,42 +18,22 @@ def test_cli_help() -> None:
     assert "--port" in result.stdout
     assert "--host" in result.stdout
     assert "--no-banner" in result.stdout
-    assert "--no-animation" in result.stdout
 
 
-def test_banner_display_no_animation() -> None:
-    """Test banner displays correctly without animation."""
-    from hitl_mcp_cli.ui import display_banner
+def test_banner_display() -> None:
+    """Test banner displays correctly."""
     from io import StringIO
+
     from rich.console import Console
+
+    from hitl_mcp_cli.ui import display_banner
 
     # Capture output
     output = StringIO()
     test_console = Console(file=output, force_terminal=True, width=120)
 
     with patch("hitl_mcp_cli.ui.banner.console", test_console):
-        display_banner(host="localhost", port=8080, animate=False)
-
-    result = output.getvalue()
-    assert "HITL" in result or "MCP" in result  # Banner text present
-    assert "localhost" in result
-    assert "8080" in result
-    assert "Streamable-HTTP" in result
-
-
-def test_banner_display_with_animation() -> None:
-    """Test banner displays correctly with animation."""
-    from hitl_mcp_cli.ui import display_banner
-    from io import StringIO
-    from rich.console import Console
-
-    # Capture output
-    output = StringIO()
-    test_console = Console(file=output, force_terminal=True, width=120)
-
-    with patch("hitl_mcp_cli.ui.banner.console", test_console):
-        with patch("hitl_mcp_cli.ui.banner.time.sleep"):  # Speed up test
-            display_banner(host="localhost", port=8080, animate=True)
+        display_banner(host="localhost", port=8080)
 
     result = output.getvalue()
     assert "localhost" in result
@@ -63,25 +41,16 @@ def test_banner_display_with_animation() -> None:
 
 
 def test_banner_no_duplicate_output() -> None:
-    """Test banner animation prints expected number of frames."""
-    from hitl_mcp_cli.ui import display_banner
+    """Test banner displays only once."""
     from io import StringIO
+
     from rich.console import Console
+
+    from hitl_mcp_cli.ui import display_banner
 
     output = StringIO()
     test_console = Console(file=output, force_terminal=True, width=120)
-
     with patch("hitl_mcp_cli.ui.banner.console", test_console):
-        with patch("hitl_mcp_cli.ui.banner.time.sleep"):
-            display_banner(host="localhost", port=8080, animate=True)
-
+        display_banner(host="localhost", port=8080)
     result = output.getvalue()
-    # Animation prints 3 frames (0.3, 0.6, 1.0 opacity)
-    assert result.count("Streamable-HTTP") == 3
-    # Without animation should print once
-    output2 = StringIO()
-    test_console2 = Console(file=output2, force_terminal=True, width=120)
-    with patch("hitl_mcp_cli.ui.banner.console", test_console2):
-        display_banner(host="localhost", port=8080, animate=False)
-    result2 = output2.getvalue()
-    assert result2.count("Streamable-HTTP") == 1
+    assert result.count("Streamable-HTTP") == 1

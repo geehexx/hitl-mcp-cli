@@ -2,13 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from hitl_mcp_cli.ui.feedback import (
-    loading_indicator,
-    show_error,
-    show_info,
-    show_success,
-    show_warning,
-)
+from hitl_mcp_cli.ui.feedback import loading_indicator, show_error, show_info, show_success, show_warning
 
 
 def test_loading_indicator_context_manager() -> None:

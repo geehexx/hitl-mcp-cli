@@ -173,10 +173,10 @@ def test_request_text_input_returns_user_input():
 def test_something():
     # Arrange
     setup_data = create_test_data()
-    
+
     # Act
     result = function_under_test(setup_data)
-    
+
     # Assert
     assert result == expected
 ```

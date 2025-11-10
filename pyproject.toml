@@ -1,6 +1,6 @@
 [project]
 name = "hitl-mcp-cli"
-version = "0.1.0"
+version = "0.2.0"
 description = "Human-in-the-loop MCP server for interactive AI agent workflows"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -35,6 +35,9 @@ dev = [
     "black>=25.9",
     "isort>=7.0",
     "ruff>=0.14",
+    "pre-commit>=3.5",
+    "bandit[toml]>=1.7",
+    "interrogate>=1.7",
 ]
 
 [project.scripts]
@@ -64,11 +67,32 @@ line_length = 110
 line-length = 110
 target-version = "py311"
 
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by black)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B"]  # Allow assert in tests
+
 [tool.mypy]
 python_version = "3.11"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = "InquirerPy.*"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -77,3 +101,13 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "--strict-markers --cov=hitl_mcp_cli --cov-report=term-missing"
 asyncio_mode = "auto"
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+skips = ["B101"]  # Skip assert_used (we use asserts in tests)
+
+[tool.interrogate]
+ignore-init-method = true
+ignore-init-module = true
+fail-under = 80
+verbose = 1

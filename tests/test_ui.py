@@ -1,28 +1,26 @@
 """Tests for UI components."""
 
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from hitl_mcp_cli.ui import display_banner
 from hitl_mcp_cli.ui.feedback import show_error, show_info, show_success, show_warning
 
 
-def test_display_banner_no_animation() -> None:
-    """Test banner displays without animation."""
-    with patch("hitl_mcp_cli.ui.banner.console") as mock_console:
-        display_banner(host="localhost", port=8080, animate=False)
-        assert mock_console.clear.called
-        assert mock_console.print.called
+def test_display_banner() -> None:
+    """Test banner displays correctly."""
+    from io import StringIO
 
+    from rich.console import Console
 
-def test_display_banner_with_animation() -> None:
-    """Test banner displays with animation."""
-    with patch("hitl_mcp_cli.ui.banner.console") as mock_console:
-        with patch("hitl_mcp_cli.ui.banner.time.sleep"):
-            display_banner(host="localhost", port=8080, animate=True)
-            assert mock_console.clear.called
-            assert mock_console.print.called
+    output = StringIO()
+    test_console = Console(file=output, force_terminal=True)
+
+    with patch("hitl_mcp_cli.ui.banner.console", test_console):
+        display_banner(host="localhost", port=8080)
+
+    result = output.getvalue()
+    assert "localhost" in result
+    assert "8080" in result
 
 
 def test_show_success() -> None:

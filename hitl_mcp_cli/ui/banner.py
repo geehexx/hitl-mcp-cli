@@ -1,12 +1,7 @@
-"""Custom startup banner with gradient colors and animation."""
-
-import time
-from typing import Literal
+"""Custom startup banner with gradient colors."""
 
 from rich.console import Console
 from rich.text import Text
-from rich.align import Align
-from rich.panel import Panel
 
 console = Console()
 
@@ -14,42 +9,35 @@ console = Console()
 def create_banner_text() -> str:
     """Create ASCII art banner text."""
     return """
-██╗  ██╗██╗████████╗██╗         ███╗   ███╗ ██████╗██████╗ 
+██╗  ██╗██╗████████╗██╗         ███╗   ███╗ ██████╗██████╗
 ██║  ██║██║╚══██╔══╝██║         ████╗ ████║██╔════╝██╔══██╗
 ███████║██║   ██║   ██║         ██╔████╔██║██║     ██████╔╝
-██╔══██║██║   ██║   ██║         ██║╚██╔╝██║██║     ██╔═══╝ 
-██║  ██║██║   ██║   ███████╗    ██║ ╚═╝ ██║╚██████╗██║     
-╚═╝  ╚═╝╚═╝   ╚═╝   ╚══════╝    ╚═╝     ╚═╝ ╚═════╝╚═╝     
+██╔══██║██║   ██║   ██║         ██║╚██╔╝██║██║     ██╔═══╝
+██║  ██║██║   ██║   ███████╗    ██║ ╚═╝ ██║╚██████╗██║
+╚═╝  ╚═╝╚═╝   ╚═╝   ╚══════╝    ╚═╝     ╚═╝ ╚═════╝╚═╝
 """
 
 
 def display_banner(
     host: str = "127.0.0.1",
     port: int = 5555,
-    animate: bool = True,
-    style: Literal["gradient", "simple"] = "gradient",
 ) -> None:
     """Display startup banner with gradient colors.
 
     Args:
         host: Server host address
         port: Server port number
-        animate: Whether to animate the banner
-        style: Banner style (gradient or simple)
     """
     banner_text = create_banner_text()
 
-    if style == "gradient":
-        # Create gradient from cyan to blue to magenta
-        text = Text()
-        lines = banner_text.strip().split("\n")
-        colors = ["cyan", "bright_cyan", "blue", "bright_blue", "magenta", "bright_magenta"]
+    # Create gradient from cyan to blue to magenta
+    text = Text()
+    lines = banner_text.strip().split("\n")
+    colors = ["cyan", "bright_cyan", "blue", "bright_blue", "magenta", "bright_magenta"]
 
-        for i, line in enumerate(lines):
-            color = colors[i % len(colors)]
-            text.append(line + "\n", style=f"bold {color}")
-    else:
-        text = Text(banner_text, style="bold cyan")
+    for i, line in enumerate(lines):
+        color = colors[i % len(colors)]
+        text.append(line + "\n", style=f"bold {color}")
 
     # Add subtitle
     subtitle = Text("\nHuman-in-the-Loop MCP Server\n", style="italic bright_white")
@@ -68,17 +56,5 @@ def display_banner(
     text.append(info)
 
     console.clear()
-    if animate:
-        # Simple fade-in animation
-        for opacity in [0.3, 0.6, 1.0]:
-            console.clear()
-            if opacity < 1.0:
-                console.print(text, style="dim")
-            else:
-                console.print(text)
-            if opacity < 1.0:
-                time.sleep(0.1)
-    else:
-        console.print(text)
-
+    console.print(text)
     console.print()

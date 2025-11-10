@@ -1,12 +1,11 @@
 """Visual feedback components for async operations."""
 
-import time
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
 
 from rich.console import Console
-from rich.spinner import Spinner
 from rich.live import Live
+from rich.spinner import Spinner
 from rich.text import Text
 
 console = Console()

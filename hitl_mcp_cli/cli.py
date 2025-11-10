@@ -16,13 +16,12 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=5555, help="Port to listen on (default: 5555)")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Host to bind to (default: 127.0.0.1)")
     parser.add_argument("--no-banner", action="store_true", help="Disable startup banner")
-    parser.add_argument("--no-animation", action="store_true", help="Disable banner animation")
 
     args = parser.parse_args()
 
     # Display custom banner
     if not args.no_banner:
-        display_banner(host=args.host, port=args.port, animate=not args.no_animation)
+        display_banner(host=args.host, port=args.port)
 
     try:
         # Run server with FastMCP banner disabled

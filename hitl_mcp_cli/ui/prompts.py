@@ -59,11 +59,11 @@ def prompt_text(
         panel_text.append(prompt, style="bold cyan")
         panel_text.append("\n(Press Esc+Enter to submit)", style="dim italic")
         console.print(Panel(panel_text, border_style="cyan", padding=(1, 2)))
-        result: str = inquirer.text(
+        result: str = inquirer.text(  # type: ignore[attr-defined]
             message="", default=default or "", multiline=True, validate=validator
         ).execute()
     else:
-        result = inquirer.text(message=formatted_prompt, default=default or "", validate=validator).execute()
+        result = inquirer.text(message=formatted_prompt, default=default or "", validate=validator).execute()  # type: ignore[attr-defined]
 
     return result
 
@@ -72,7 +72,7 @@ def prompt_text(
 def prompt_select(prompt: str, choices: list[str], default: str | None = None) -> str:
     """Prompt for single selection."""
     formatted_prompt = f"{ICONS['select']} {prompt}"
-    result: str = inquirer.select(message=formatted_prompt, choices=choices, default=default).execute()
+    result: str = inquirer.select(message=formatted_prompt, choices=choices, default=default).execute()  # type: ignore[attr-defined]
     return result
 
 
@@ -80,7 +80,7 @@ def prompt_select(prompt: str, choices: list[str], default: str | None = None) -
 def prompt_checkbox(prompt: str, choices: list[str]) -> list[str]:
     """Prompt for multiple selections."""
     formatted_prompt = f"{ICONS['checkbox']} {prompt}"
-    result: list[str] = inquirer.checkbox(message=formatted_prompt, choices=choices).execute()
+    result: list[str] = inquirer.checkbox(message=formatted_prompt, choices=choices).execute()  # type: ignore[attr-defined]
     return result
 
 
@@ -88,7 +88,7 @@ def prompt_checkbox(prompt: str, choices: list[str]) -> list[str]:
 def prompt_confirm(prompt: str, default: bool = False) -> bool:
     """Prompt for yes/no confirmation."""
     formatted_prompt = f"{ICONS['confirm']} {prompt}"
-    result: bool = inquirer.confirm(message=formatted_prompt, default=default).execute()
+    result: bool = inquirer.confirm(message=formatted_prompt, default=default).execute()  # type: ignore[attr-defined]
     return result
 
 
@@ -107,7 +107,7 @@ def prompt_path(
             validator = PathValidator(message="Path must exist")
 
     formatted_prompt = f"{ICONS['path']} {prompt}"
-    result = inquirer.filepath(message=formatted_prompt, default=default or "", validate=validator).execute()
+    result = inquirer.filepath(message=formatted_prompt, default=default or "", validate=validator).execute()  # type: ignore[attr-defined]
     return str(Path(result).expanduser().resolve())
 
 

@@ -1,9 +1,6 @@
 """Integration tests for CLI module."""
 
-import subprocess
-import sys
-import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -113,25 +110,6 @@ def test_cli_main_generic_exception() -> None:
 
                 # Should log error
                 mock_logger.error.assert_called_once()
-
-
-def test_cli_main_no_animation() -> None:
-    """Test CLI with --no-animation flag."""
-    from hitl_mcp_cli.cli import main
-
-    with patch("hitl_mcp_cli.cli.mcp.run") as mock_run:
-        with patch("sys.argv", ["hitl-mcp", "--no-animation"]):
-            with patch("hitl_mcp_cli.cli.display_banner") as mock_banner:
-                mock_run.side_effect = KeyboardInterrupt()
-
-                try:
-                    main()
-                except SystemExit:
-                    pass
-
-                # Banner should be called with animate=False
-                call_kwargs = mock_banner.call_args[1]
-                assert call_kwargs["animate"] is False
 
 
 def test_cli_fastmcp_show_banner_disabled() -> None:

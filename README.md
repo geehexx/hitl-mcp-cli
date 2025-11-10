@@ -7,12 +7,12 @@
 [![MCP](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io)
 
 ```
-██╗  ██╗██╗████████╗██╗         ███╗   ███╗ ██████╗██████╗ 
+██╗  ██╗██╗████████╗██╗         ███╗   ███╗ ██████╗██████╗
 ██║  ██║██║╚══██╔══╝██║         ████╗ ████║██╔════╝██╔══██╗
 ███████║██║   ██║   ██║         ██╔████╔██║██║     ██████╔╝
-██╔══██║██║   ██║   ██║         ██║╚██╔╝██║██║     ██╔═══╝ 
-██║  ██║██║   ██║   ███████╗    ██║ ╚═╝ ██║╚██████╗██║     
-╚═╝  ╚═╝╚═╝   ╚═╝   ╚══════╝    ╚═╝     ╚═╝ ╚═════╝╚═╝     
+██╔══██║██║   ██║   ██║         ██║╚██╔╝██║██║     ██╔═══╝
+██║  ██║██║   ██║   ███████╗    ██║ ╚═╝ ██║╚██████╗██║
+╚═╝  ╚═╝╚═╝   ╚═╝   ╚══════╝    ╚═╝     ╚═╝ ╚═════╝╚═╝
 ```
 
 ---
@@ -392,7 +392,7 @@ if action == "Deploy":
         prompt="Deploy to which environment?",
         choices=["Staging", "Production"]
     )
-    
+
     if env == "Production":
         # Extra confirmation for production
         confirmed = await request_confirmation(

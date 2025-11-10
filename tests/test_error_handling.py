@@ -46,9 +46,7 @@ async def test_request_selection_keyboard_interrupt(mcp_client: Client) -> None:
         mock.side_effect = KeyboardInterrupt()
 
         with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool(
-                "request_selection", {"prompt": "Choose:", "choices": ["A", "B"]}
-            )
+            await mcp_client.call_tool("request_selection", {"prompt": "Choose:", "choices": ["A", "B"]})
 
         assert "User cancelled" in str(exc_info.value)
 
@@ -60,9 +58,7 @@ async def test_request_selection_generic_error(mcp_client: Client) -> None:
         mock.side_effect = RuntimeError("Selection failed")
 
         with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool(
-                "request_selection", {"prompt": "Choose:", "choices": ["A", "B"]}
-            )
+            await mcp_client.call_tool("request_selection", {"prompt": "Choose:", "choices": ["A", "B"]})
 
         assert "Selection failed" in str(exc_info.value)
 
@@ -83,7 +79,7 @@ async def test_request_confirmation_keyboard_interrupt(mcp_client: Client) -> No
 async def test_request_confirmation_generic_error(mcp_client: Client) -> None:
     """Test confirmation handles generic errors."""
     with patch("hitl_mcp_cli.server.prompt_confirm", new_callable=AsyncMock) as mock:
-        mock.side_effect = IOError("Terminal error")
+        mock.side_effect = OSError("Terminal error")
 
         with pytest.raises(Exception) as exc_info:
             await mcp_client.call_tool("request_confirmation", {"prompt": "Proceed?"})
@@ -122,9 +118,7 @@ async def test_notify_completion_error(mcp_client: Client) -> None:
         mock.side_effect = RuntimeError("Display error")
 
         with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool(
-                "notify_completion", {"title": "Test", "message": "Message"}
-            )
+            await mcp_client.call_tool("notify_completion", {"title": "Test", "message": "Message"})
 
         assert "Notification display failed" in str(exc_info.value)
 
