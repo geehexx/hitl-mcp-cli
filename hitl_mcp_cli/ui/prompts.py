@@ -60,8 +60,14 @@ def prompt_text(
         panel_text.append("\n(Press Esc+Enter to submit)", style="dim italic")
         console.print(Panel(panel_text, border_style="cyan", padding=(1, 2)))
         result: str = inquirer.text(  # type: ignore[attr-defined]
-            message="", default=default or "", multiline=True, validate=validator
+            message="",
+            default=default or "",
+            multiline=True,
+            validate=validator,
+            keybindings={"answer": [{"key": "escape enter"}]},
         ).execute()
+        # Print newline to prevent terminal clearing
+        console.print()
     else:
         result = inquirer.text(message=formatted_prompt, default=default or "", validate=validator).execute()  # type: ignore[attr-defined]
 

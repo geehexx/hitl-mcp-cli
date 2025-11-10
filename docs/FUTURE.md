@@ -194,16 +194,43 @@ This document tracks potential improvements and features for future consideratio
 3. **Monitoring**: Log all tool calls for audit trail
 4. **Principle of least privilege**: Run server as non-root user
 
-## Non-Goals
+## Plugin Architecture
 
-Things we explicitly don't want to do:
+**Status**: Plugin framework development moved to dedicated repository.
 
-- **GUI interface**: This is a terminal-based tool by design
-- **Web interface**: Adds complexity and security concerns
-- **Built-in authentication**: Should be handled at infrastructure level
-- **Database storage**: Keep it stateless and simple
-- **Complex workflow engine**: Not a workflow orchestrator
-- **LLM integration**: This is a pure I/O tool, not an AI service
+HITL MCP CLI will gain plugin support through the **[MCP Plugin Server](https://github.com/geehexx/mcp-plugin-server)** framework. This generic, reusable framework enables:
+
+- Plugin-based extensibility for any MCP server
+- Wrapper mode to enhance existing MCP servers
+- Standalone mode to build complete servers from plugins
+- Robust validation and per-plugin logging
+
+See the [MCP Plugin Server documentation](https://github.com/geehexx/mcp-plugin-server/tree/main/docs) for comprehensive details on:
+- Plugin architecture and design
+- API specifications and contracts
+- Implementation guide and examples
+- Integration path for HITL
+
+### HITL-Specific Plugin Enhancements
+
+Once the plugin framework is ready, HITL-specific enhancements to consider:
+
+#### Web UI Plugin
+- Browser-based interface for remote access
+- WebSocket for real-time updates
+- Mobile-responsive design
+
+#### Slack Integration Plugin
+- Post prompts as Slack messages
+- Interactive components (buttons, select menus)
+- Team collaboration and audit trail
+
+#### AI Router Plugin (RITL/NITL)
+- AI-powered decision routing
+- Confidence-based escalation to humans
+- Learning from past interactions
+
+
 
 ## Evaluation Criteria
 
@@ -214,16 +241,15 @@ When considering any enhancement:
 3. **Is it agent-friendly?** Will LLMs understand how to use it?
 4. **Is it maintainable?** Can we support it long-term?
 5. **Does it fit the core mission?** Human-in-the-loop input collection
-6. **Is it production-ready?** Does it follow MCP best practices?
 
 If the answer to any question is "no" or "maybe", defer the enhancement.
 
 ## Implementation Priority
 
 ### High Priority (Production Blockers)
-- Configuration management (env vars)
+- Configuration management (env vars) ✅ DONE
 - Health check endpoint
-- Structured logging
+- Structured logging ✅ DONE
 
 ### Medium Priority (Production Nice-to-Have)
 - Metrics collection
@@ -234,3 +260,4 @@ If the answer to any question is "no" or "maybe", defer the enhancement.
 - Advanced UI features
 - New tool types
 - Integration examples
+- Plugin support (depends on [mcp-plugin-server](https://github.com/geehexx/mcp-plugin-server))

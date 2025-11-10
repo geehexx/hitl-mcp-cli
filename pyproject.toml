@@ -1,6 +1,6 @@
 [project]
 name = "hitl-mcp-cli"
-version = "0.3.0"
+version = "0.4.0"
 description = "Human-in-the-loop MCP server for interactive AI agent workflows"
 readme = "README.md"
 requires-python = ">=3.11"

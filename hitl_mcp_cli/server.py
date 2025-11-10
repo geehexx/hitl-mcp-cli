@@ -13,21 +13,47 @@ mcp = FastMCP(
 
 This server provides tools for requesting user input and feedback during agent execution.
 
-## When to Use These Tools
+## Core Principle
 
-**Use these tools when you need to:**
-- Ask clarifying questions before making significant decisions
-- Request user approval for destructive operations
-- Gather specific information that's not available in context
-- Present options and let the user choose the approach
-- Confirm important assumptions or interpretations
+Tools enable real-time user input during execution, eliminating assumptions. Use liberally for ANY uncertainty.
 
-**Best Practices:**
-- Always provide clear, specific prompts
+## When to Invoke (Timing Triggers)
+
+- **Immediately** when encountering uncertainty (don't batch, don't defer)
+- **Before beginning large work** (allow plan review, prevent wasted effort)
+- **Before ending session** (check for additional work, prevent premature termination)
+- **At inflection points** (milestone completion, approach changes, scope shifts)
+
+## What Constitutes Uncertainty (Usage Categories)
+
+- **Ambiguous requirements** (multiple interpretations, unclear scope, undefined success criteria)
+- **Missing information** (parameters, target files, configuration values)
+- **Decision points** (multiple valid approaches, trade-offs, naming, file organization)
+- **Confirmations** (destructive operations, expensive operations, breaking changes)
+- **Preferences** (code style, implementation patterns, testing strategies, documentation format)
+
+## Which Tool to Use (Selection Logic)
+
+- `request_text_input`: Free-form input (names, descriptions, paths, multi-line content)
+- `request_selection`: Enumerable options (≤10 choices with trade-offs)
+- `request_confirmation`: Binary decisions (yes/no, proceed/cancel)
+- `request_path_input`: File/directory paths with validation
+- `notify_completion`: Status updates (success, info, warning, error)
+
+## Session Continuity Benefits
+
+- Prevents premature termination (user can queue multiple tasks)
+- Reduces token waste (avoids context reload in new sessions)
+- Enables continuous work flow (chain tasks without interruption)
+- Early course correction (fix approach before wasting implementation effort)
+
+## Best Practices
+
+- Always provide clear, specific prompts with context
 - Use `request_selection` with meaningful choices when options are limited
 - Use `request_confirmation` for yes/no decisions
-- Batch related questions when possible to minimize interruptions
 - Use `notify_completion` to inform user of major milestone completions
+- When calling tools, explain your reasoning to help users understand your thought process
 
 ## Tool Usage Patterns
 
@@ -56,10 +82,18 @@ For collecting structured data:
 
 ## Important Notes
 
-- These tools will pause agent execution until user responds
+- These tools will pause agent execution until user responds (infinite timeout configured)
 - Always provide context in your prompts - users may not remember previous messages
 - Default values and clear choices improve user experience
 - Use validation to prevent invalid input when possible
+- If you're uncertain about anything, ASK - that's what these tools are for
+
+## Meta-Development Note
+
+This HITL MCP server is also used during its own development. When working on this project:
+- Use these tools to clarify requirements and get user feedback
+- The "user" in development context is the project maintainer
+- Don't confuse the development usage with the production usage examples
 """,
 )
 

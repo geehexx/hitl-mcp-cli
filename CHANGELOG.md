@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2025-01-10
+
+### Added
+- **NEW**: Meta-development awareness documentation (memory-bank/meta-development.md)
+- **NEW**: Comprehensive timeout and error handling tests (test_timeout_handling.py)
+- **NEW**: Multiline terminal behavior tests (test_multiline_terminal.py)
+- **NEW**: Error handling best practices in README troubleshooting section
+- **NEW**: Enhanced server instructions with improved tool discoverability guidance
+- **NEW**: Session continuity benefits documentation in server instructions
+- **NEW**: Timing triggers and usage categories for tool invocation
+
+### Changed
+- **IMPROVED**: Server instructions now emphasize using tools liberally for ANY uncertainty
+- **IMPROVED**: Tool discoverability with clear timing triggers and selection logic
+- **IMPROVED**: Documentation clarifies when to invoke tools (immediately, not deferred)
+- **IMPROVED**: Error handling guidance distinguishes between user cancellation, timeouts, and unexpected errors
+
+### Fixed
+- **CRITICAL**: Multiline text input no longer clears terminal after Esc+Enter submission
+- **CRITICAL**: Added explicit keybindings for multiline input to prevent screen clearing
+- **IMPROVED**: Error handling now properly handles timeout and connection errors (not just KeyboardInterrupt)
+- **IMPROVED**: Test coverage for timeout scenarios and error recovery
+
+### Documentation
+- Added troubleshooting section for multiline terminal clearing issue
+- Added error handling best practices for AI agent developers
+- Added connection error troubleshooting guidance
+- Clarified error categories (user cancellation, timeout/connection, validation, unexpected)
+- Added meta-development context to prevent confusion between development and production usage
+- **NEW**: Added Plugin Framework section referencing mcp-plugin-server repository
+- **NEW**: Cleaned up docs/FUTURE.md - moved plugin architecture details to dedicated mcp-plugin-server repo
+- **NEW**: Added HITL-specific plugin enhancement ideas in FUTURE.md
+
+### Testing
+- Added 15+ new tests for timeout handling and error scenarios
+- Added 5+ new tests for multiline terminal behavior
+- Improved test coverage for concurrent operations and error recovery
+- Added tests for long-running operations and sequential tool calls
+
 ## [0.3.0] - 2025-01-10
 
 ### Added

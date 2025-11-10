@@ -496,6 +496,16 @@ npx @modelcontextprotocol/inspector hitl-mcp
 - **[Future Enhancements](docs/FUTURE.md)**: Planned improvements and ideas
 - **[Changelog](CHANGELOG.md)**: Version history and changes
 
+## 🔌 Plugin Framework
+
+HITL MCP CLI will gain plugin support through the **[MCP Plugin Server](https://github.com/geehexx/mcp-plugin-server)** framework. This will enable:
+
+- Extensible architecture with plugin-based capabilities
+- Community-contributed plugins for additional features
+- Wrapper mode to enhance HITL with new functionality
+
+See the [MCP Plugin Server repository](https://github.com/geehexx/mcp-plugin-server) for details on the plugin framework architecture and development.
+
 ---
 
 ## 🔧 Troubleshooting
@@ -561,6 +571,68 @@ If you need a health check endpoint, this is tracked in docs/FUTURE.md as a futu
 1. Check if `HITL_LOG_LEVEL` environment variable is set to INFO or DEBUG
 2. Access logs only appear when `HITL_LOG_LEVEL=DEBUG`
 3. To completely silence the server: `HITL_LOG_LEVEL=ERROR hitl-mcp --no-banner`
+
+### Multiline Text Input Clears Terminal
+
+**Problem**: Terminal screen clears after submitting multiline text with Esc+Enter.
+
+**Solution**: This has been fixed in v0.4.0. The multiline input now preserves screen content by:
+- Using explicit keybindings for Esc+Enter
+- Adding a newline after input to prevent terminal clearing
+
+If you're still experiencing this issue, ensure you're running the latest version:
+```bash
+uvx hitl-mcp-cli@latest
+# or
+uv tool upgrade hitl-mcp-cli
+```
+
+### Connection Errors or Timeouts
+
+**Problem**: Tool calls fail with connection errors or timeout errors.
+
+**Solution**:
+1. **Verify server is running**: Check that `hitl-mcp` is running and accessible
+2. **Check network connectivity**: Ensure the MCP client can reach the server URL
+3. **Verify timeout configuration**: Ensure `"timeout": 0` is set in MCP client config
+4. **Check firewall settings**: Ensure port 5555 (or your custom port) is not blocked
+
+**For AI Agents**: If you encounter timeout or connection errors:
+- The error indicates a configuration or network issue, not a user cancellation
+- Check the troubleshooting section above
+- Inform the user about the error and suggest checking server status
+- Do not retry indefinitely - after 2-3 failures, report the issue to the user
+
+### Error Handling Best Practices
+
+**For AI Agent Developers**:
+
+When integrating HITL MCP tools, handle errors appropriately:
+
+```python
+try:
+    result = await request_text_input(prompt="Enter value:")
+except Exception as e:
+    if "User cancelled" in str(e):
+        # User pressed Ctrl+C - respect their decision
+        print("Operation cancelled by user")
+        return
+    elif "timed out" in str(e).lower() or "connection" in str(e).lower():
+        # Configuration or network issue
+        print("Error: Cannot connect to HITL server")
+        print("Please check that hitl-mcp is running and timeout is configured")
+        return
+    else:
+        # Unexpected error
+        print(f"Unexpected error: {e}")
+        raise
+```
+
+**Error Categories**:
+- **User Cancellation** (Ctrl+C): Respect the cancellation, don't retry
+- **Timeout/Connection**: Configuration issue, inform user, don't retry indefinitely
+- **Validation Errors**: User input doesn't match requirements, tool will re-prompt automatically
+- **Unexpected Errors**: Log and report to user
 
 ---
 
