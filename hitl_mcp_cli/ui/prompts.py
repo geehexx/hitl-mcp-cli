@@ -125,10 +125,15 @@ def prompt_select(prompt: str, choices: list[str], default: str | None = None) -
     else:
         formatted_prompt = f"{ICONS['select']} {prompt}"
 
-    result: str = inquirer.select(  # type: ignore[attr-defined]
+    # Enable fuzzy search for long lists
+    enable_filter = len(choices) > 15
+
+    result: str = inquirer.select(  # type: ignore[attr-defined,call-arg]
         message=formatted_prompt,
         choices=choices,
         default=default,
+        filter_enable=enable_filter,
+        max_height="70%",
         raise_keyboard_interrupt=True,
     ).execute()
     _needs_separator = True
@@ -150,10 +155,15 @@ def prompt_checkbox(prompt: str, choices: list[str]) -> list[str]:
     else:
         formatted_prompt = f"{ICONS['checkbox']} {prompt}"
 
-    result: list[str] = inquirer.checkbox(  # type: ignore[attr-defined]
+    # Enable fuzzy search for long lists
+    enable_filter = len(choices) > 15
+
+    result: list[str] = inquirer.checkbox(  # type: ignore[attr-defined,call-arg]
         message=formatted_prompt,
         choices=choices,
         show_cursor=True,
+        filter_enable=enable_filter,
+        max_height="70%",
         instruction="(Space to select, Enter to confirm)",
         raise_keyboard_interrupt=True,
     ).execute()

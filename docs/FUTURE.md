@@ -218,7 +218,7 @@ This document tracks potential improvements and features for future consideratio
 
 - Structured logging (JSON format for production)
 - Configurable log levels per environment
-- Health check endpoint (/health)
+- Health check endpoint (/health) - **DEFERRED**: MCP protocol includes built-in `ping` utility for health checks. Custom HTTP endpoints are not standard MCP practice and over-engineer for local dev tool use case. Only needed if HITL is deployed as shared production service (rare). Use MCP `ping` for health monitoring.
 - Metrics endpoint (/metrics) with Prometheus format
 - Request/response logging (opt-in for debugging)
 - Performance metrics (request duration, error rates)
@@ -254,7 +254,9 @@ This document tracks potential improvements and features for future consideratio
 
 - [ ] Configuration management (env vars, config files)
 - [ ] Structured logging with levels
-- [ ] Health check endpoint
+- [x] Configuration management (env vars) ✅ DONE
+- [x] Structured logging with levels ✅ DONE
+- [ ] Health monitoring (use MCP `ping` utility, not custom endpoint)
 - [ ] Metrics collection
 - [ ] Graceful shutdown handling
 - [ ] Connection pooling (if needed)
@@ -472,14 +474,15 @@ Once the plugin framework is ready, HITL-specific enhancements to consider:
 
 **Quick Wins (< 1 hour):**
 
-1. **Search/filter for long choice lists** - 30 min
-   - Add `filter=True` when len(choices) > 15
+1. ✅ **DONE (v0.5.0)**: **Search/filter for long choice lists** - 30 min
+   - Added `filter_enable=True` when len(choices) > 15
+   - Added `max_height="70%"` to prevent overwhelming display
    - Improves UX for large selection lists
 
-2. **Color blindness testing** - 1 hour
-   - Test current colors with simulator
-   - Document findings
-   - Verify icons provide sufficient non-color cues
+2. ✅ **DONE (v0.5.0)**: **Color blindness testing** - 1 hour
+   - Tested current colors with simulator
+   - Documented findings in docs/ACCESSIBILITY.md
+   - Verified icons provide sufficient non-color cues
 
 **Medium Effort (1-4 hours):**
 3. **High contrast theme** - 2-3 hours
@@ -568,8 +571,10 @@ If the answer to any question is "no" or "maybe", defer the enhancement.
 ### High Priority (Production Blockers)
 
 - Configuration management (env vars) ✅ DONE
-- Health check endpoint
 - Structured logging ✅ DONE
+- Health monitoring: Use MCP `ping` utility (built-in protocol feature)
+
+**Note**: Most "production blocker" items are only relevant if HITL is deployed as a shared production service. For typical local development use (the primary use case), configuration management and logging are sufficient.
 
 ### Medium Priority (Production Nice-to-Have)
 

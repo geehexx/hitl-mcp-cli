@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **NEW**: Fuzzy search for long choice lists (>15 items) in select/checkbox prompts
+- **NEW**: Comprehensive accessibility documentation (docs/ACCESSIBILITY.md)
+- **NEW**: Accessibility section in README with feature highlights
+- **NEW**: Color blindness compatibility verification and documentation
+- **NEW**: `max_height="70%"` for select/checkbox prompts to prevent overwhelming display
+
+### Changed
+- **IMPROVED**: Selection prompts automatically enable fuzzy filtering when choices exceed 15 items
+- **IMPROVED**: Better UX for long choice lists with search and height constraints
+
+### Documentation
+- Added docs/ACCESSIBILITY.md covering keyboard navigation, color blindness support, screen reader compatibility
+- Added accessibility testing methodology and roadmap
+- Added accessibility best practices for users with diverse needs
+- Updated README with accessibility section and link to detailed documentation
+
 ## [0.4.0] - 2025-01-10
 
 ### Added

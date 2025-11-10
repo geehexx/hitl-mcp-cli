@@ -493,8 +493,21 @@ npx @modelcontextprotocol/inspector hitl-mcp
 
 - **[Architecture](docs/ARCHITECTURE.md)**: System design and component details
 - **[Testing Guide](docs/TESTING.md)**: Comprehensive testing documentation
+- **[Accessibility](docs/ACCESSIBILITY.md)**: Accessibility features and guidelines
 - **[Future Enhancements](docs/FUTURE.md)**: Planned improvements and ideas
 - **[Changelog](CHANGELOG.md)**: Version history and changes
+
+## ♿ Accessibility
+
+HITL MCP CLI is designed to be accessible:
+
+- **✅ Keyboard-only navigation**: All interactions work without a mouse
+- **✅ Non-color visual cues**: Icons distinguish prompt types independent of color
+- **✅ Color blindness support**: Icons ensure users with color vision deficiencies can use all features
+- **✅ Fuzzy search**: Long choice lists (>15 items) automatically enable search filtering
+- **✅ Terminal compatibility**: Works with screen readers through terminal emulators
+
+See [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) for detailed accessibility information, testing methodology, and recommendations for users with diverse needs.
 
 ## 🔌 Plugin Framework
 
