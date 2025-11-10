@@ -2,8 +2,6 @@
 
 import argparse
 import logging
-import sys
-from io import StringIO
 
 from .server import mcp
 from .ui import display_banner
@@ -26,19 +24,12 @@ def main() -> None:
     if not args.no_banner:
         display_banner(host=args.host, port=args.port, animate=not args.no_animation)
 
-    # Suppress FastMCP startup messages by redirecting stdout temporarily
-    old_stdout = sys.stdout
-    sys.stdout = StringIO()
-
     try:
-        # Restore stdout before running to allow normal operation
-        sys.stdout = old_stdout
-        mcp.run(transport="streamable-http", host=args.host, port=args.port)
+        # Run server with FastMCP banner disabled
+        mcp.run(transport="streamable-http", host=args.host, port=args.port, show_banner=False)
     except KeyboardInterrupt:
-        sys.stdout = old_stdout
         print("\n\n👋 Server stopped by user")
     except Exception as e:
-        sys.stdout = old_stdout
         logger.error(f"Server error: {e}")
         raise
 

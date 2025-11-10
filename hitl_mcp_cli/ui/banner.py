@@ -67,25 +67,18 @@ def display_banner(
 
     text.append(info)
 
+    console.clear()
     if animate:
-        # Slide-in animation
-        console.clear()
-        lines_list = text.plain.split("\n")
-        for i in range(len(lines_list)):
+        # Simple fade-in animation
+        for opacity in [0.3, 0.6, 1.0]:
             console.clear()
-            partial = Text()
-            for j, line in enumerate(lines_list[:i+1]):
-                # Reconstruct styling
-                if j < 6:  # Banner lines
-                    color = ["cyan", "bright_cyan", "blue", "bright_blue", "magenta", "bright_magenta"][j % 6]
-                    partial.append(line + "\n", style=f"bold {color}")
-                else:
-                    partial.append(line + "\n")
-            console.print(partial, end="")
-            time.sleep(0.03)
-        time.sleep(0.2)
+            if opacity < 1.0:
+                console.print(text, style="dim")
+            else:
+                console.print(text)
+            if opacity < 1.0:
+                time.sleep(0.1)
     else:
-        console.clear()
         console.print(text)
 
     console.print()
