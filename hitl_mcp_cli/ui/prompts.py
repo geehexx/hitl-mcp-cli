@@ -91,7 +91,7 @@ def prompt_text(
                 default=default or "",
                 multiline=True,
                 validate=validator,
-                keybindings={"answer": [{"key": "escape enter"}]},
+                keybindings={"answer": [{"key": ["escape", "enter"]}]},
                 raise_keyboard_interrupt=True,
             ).execute()
         except KeyboardInterrupt:
