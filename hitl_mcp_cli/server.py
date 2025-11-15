@@ -278,20 +278,70 @@ async def notify_completion(
 # These are module-level so they can be accessed from cli.py for lifecycle management
 coordination_channel_store = None
 coordination_lock_manager = None
+coordination_auth_manager = None
+coordination_rate_limiter = None
+coordination_heartbeat_manager = None
 
 if ENABLE_COORDINATION:
+    from .coordination.auth import AuthManager
     from .coordination.channels import ChannelStore
+    from .coordination.heartbeat import HeartbeatManager
     from .coordination.locks import LockManager
+    from .coordination.ratelimit import RateLimiter
     from .coordination.resources import register_coordination_resources
-    from .coordination.tools import register_coordination_tools
+    from .coordination.tools_enhanced import register_coordination_tools_enhanced
 
     # Initialize coordination backends
     coordination_channel_store = ChannelStore()
     coordination_lock_manager = LockManager()
 
+    # Optional features (check environment variables)
+    ENABLE_AUTH = os.getenv("HITL_COORDINATION_AUTH", "").lower() in ("1", "true", "yes")
+    ENABLE_RATE_LIMIT = os.getenv("HITL_COORDINATION_RATE_LIMIT", "1").lower() in ("1", "true", "yes")
+    ENABLE_HEARTBEAT = os.getenv("HITL_COORDINATION_HEARTBEAT", "1").lower() in ("1", "true", "yes")
+
+    if ENABLE_AUTH:
+        coordination_auth_manager = AuthManager()
+        # Register default agent for development (remove in production)
+        if os.getenv("HITL_DEV_MODE", "").lower() in ("1", "true", "yes"):
+            dev_key = coordination_auth_manager.register_agent(
+                "dev-agent", allowed_channels={"*"}, permissions={"read", "write", "lock"}
+            )
+            import logging
+
+            logging.getLogger(__name__).info(f"Dev agent registered with key: {dev_key[:8]}...")
+
+    if ENABLE_RATE_LIMIT:
+        coordination_rate_limiter = RateLimiter(
+            default_per_agent_limit=int(os.getenv("HITL_RATE_LIMIT_PER_AGENT", "100")),
+            global_limit=int(os.getenv("HITL_RATE_LIMIT_GLOBAL", "1000")),
+        )
+
+    if ENABLE_HEARTBEAT:
+        coordination_heartbeat_manager = HeartbeatManager(
+            heartbeat_interval=int(os.getenv("HITL_HEARTBEAT_INTERVAL", "30")),
+            missing_threshold=int(os.getenv("HITL_HEARTBEAT_MISSING", "2")),
+            dead_threshold=int(os.getenv("HITL_HEARTBEAT_DEAD", "3")),
+        )
+
+        # Register callback to release locks from dead agents
+        def release_dead_agent_locks(agent_id: str):
+            import asyncio
+
+            asyncio.create_task(coordination_lock_manager.release_all(agent_id))
+
+        coordination_heartbeat_manager.register_dead_callback(release_dead_agent_locks)
+
     # Register MCP resources and tools
     register_coordination_resources(mcp, coordination_channel_store)
-    register_coordination_tools(mcp, coordination_channel_store, coordination_lock_manager)
+    register_coordination_tools_enhanced(
+        mcp,
+        coordination_channel_store,
+        coordination_lock_manager,
+        auth_manager=coordination_auth_manager,
+        rate_limiter=coordination_rate_limiter,
+        heartbeat_manager=coordination_heartbeat_manager,
+    )
 
     # Update server instructions
     mcp.instructions += """

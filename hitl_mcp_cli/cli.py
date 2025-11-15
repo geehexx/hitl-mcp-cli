@@ -59,14 +59,19 @@ def main() -> None:
         display_banner(host=args.host, port=args.port)
 
     try:
-        # Start coordination backend if enabled
+        # Start coordination backends if enabled
         if args.enable_coordination:
-            from .server import coordination_lock_manager
+            from .server import coordination_heartbeat_manager, coordination_lock_manager
 
             if coordination_lock_manager:
                 # Start lock cleanup task
                 asyncio.create_task(coordination_lock_manager.start())
                 logger.debug("Coordination lock manager started")
+
+            if coordination_heartbeat_manager:
+                # Start heartbeat monitoring
+                asyncio.create_task(coordination_heartbeat_manager.start())
+                logger.debug("Coordination heartbeat manager started")
 
         # Run server with FastMCP banner disabled
         logger.debug(f"Server configuration: host={args.host}, port={args.port}, banner={not args.no_banner}")
