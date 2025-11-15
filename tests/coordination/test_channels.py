@@ -2,7 +2,7 @@
 
 import pytest
 
-from hitl_mcp_cli.coordination.channels import ChannelStore, Message
+from hitl_mcp_cli.coordination.channels import ChannelStore
 from hitl_mcp_cli.coordination.schema import ChannelFullError, MessageType
 
 

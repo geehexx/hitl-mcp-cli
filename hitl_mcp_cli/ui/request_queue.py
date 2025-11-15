@@ -185,7 +185,7 @@ class RequestQueue:
         # Show queue size if there are pending requests
         queue_size = self.queue.qsize()
         if queue_size > 0:
-            context.append(f"  |  Queued: ", style="dim")
+            context.append("  |  Queued: ", style="dim")
             context.append(str(queue_size), style="yellow")
 
         console.print(Panel(context, border_style="dim", padding=(0, 1)))

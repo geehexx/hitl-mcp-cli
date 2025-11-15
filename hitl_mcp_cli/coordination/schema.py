@@ -1,7 +1,7 @@
 """Message schemas and validation for multi-agent coordination."""
 
 import enum
-from typing import Any, Literal
+from typing import Any
 
 
 class MessageType(str, enum.Enum):

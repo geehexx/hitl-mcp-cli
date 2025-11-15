@@ -250,7 +250,7 @@ def register_coordination_tools_enhanced(
         """Get rate limit status for agent."""
         if has_auth and api_key:
             if not auth_manager.authenticate(agent_id, api_key):
-                raise AuthenticationError(f"Invalid credentials")
+                raise AuthenticationError("Invalid credentials")
 
         if not has_rate_limit:
             return {"rate_limiting_disabled": True}
@@ -264,7 +264,7 @@ def register_coordination_tools_enhanced(
         """Leave a coordination channel."""
         if has_auth and api_key:
             if not auth_manager.authenticate(agent_id, api_key):
-                raise AuthenticationError(f"Invalid credentials")
+                raise AuthenticationError("Invalid credentials")
 
         await channel_store.leave_channel(channel_name, agent_id)
         return {"left": True}

@@ -1,9 +1,7 @@
 """Tests for authentication and authorization."""
 
-import pytest
 
 from hitl_mcp_cli.coordination.auth import AuthManager
-from hitl_mcp_cli.coordination.schema import AuthenticationError, AuthorizationError
 
 
 def test_register_agent():

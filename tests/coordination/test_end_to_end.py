@@ -1,7 +1,8 @@
 """End-to-end tests for coordination server integration."""
 
-import asyncio
+import importlib
 import os
+import sys
 
 import pytest
 
@@ -11,14 +12,23 @@ import pytest
 @pytest.mark.asyncio
 async def test_server_imports_with_coordination():
     """Test server can be imported with coordination enabled."""
+    # Set environment before reload
     os.environ["HITL_ENABLE_COORDINATION"] = "1"
 
-    # Import should succeed
-    from hitl_mcp_cli import server
+    # Force reload to pick up environment variable
+    if "hitl_mcp_cli.server" in sys.modules:
+        import hitl_mcp_cli.server as server_module
 
-    assert server.ENABLE_COORDINATION is True
-    assert server.coordination_channel_store is not None
-    assert server.coordination_lock_manager is not None
+        importlib.reload(server_module)
+    else:
+        import hitl_mcp_cli.server as server_module
+
+    assert server_module.ENABLE_COORDINATION is True
+    assert server_module.coordination_channel_store is not None
+    assert server_module.coordination_lock_manager is not None
+
+    # Clean up for other tests
+    os.environ.pop("HITL_ENABLE_COORDINATION", None)
 
 
 @pytest.mark.asyncio
@@ -29,13 +39,16 @@ async def test_server_with_auth_enabled():
     os.environ["HITL_DEV_MODE"] = "1"
 
     # Reload server module to pick up env vars
-    import importlib
-
-    from hitl_mcp_cli import server
+    import hitl_mcp_cli.server as server
 
     importlib.reload(server)
 
     assert server.coordination_auth_manager is not None
+
+    # Clean up
+    os.environ.pop("HITL_ENABLE_COORDINATION", None)
+    os.environ.pop("HITL_COORDINATION_AUTH", None)
+    os.environ.pop("HITL_DEV_MODE", None)
 
 
 @pytest.mark.asyncio
@@ -44,13 +57,15 @@ async def test_server_with_rate_limiting_enabled():
     os.environ["HITL_ENABLE_COORDINATION"] = "1"
     os.environ["HITL_COORDINATION_RATE_LIMIT"] = "1"
 
-    import importlib
-
-    from hitl_mcp_cli import server
+    import hitl_mcp_cli.server as server
 
     importlib.reload(server)
 
     assert server.coordination_rate_limiter is not None
+
+    # Clean up
+    os.environ.pop("HITL_ENABLE_COORDINATION", None)
+    os.environ.pop("HITL_COORDINATION_RATE_LIMIT", None)
 
 
 @pytest.mark.asyncio
@@ -59,13 +74,15 @@ async def test_server_with_heartbeat_enabled():
     os.environ["HITL_ENABLE_COORDINATION"] = "1"
     os.environ["HITL_COORDINATION_HEARTBEAT"] = "1"
 
-    import importlib
-
-    from hitl_mcp_cli import server
+    import hitl_mcp_cli.server as server
 
     importlib.reload(server)
 
     assert server.coordination_heartbeat_manager is not None
+
+    # Clean up
+    os.environ.pop("HITL_ENABLE_COORDINATION", None)
+    os.environ.pop("HITL_COORDINATION_HEARTBEAT", None)
 
 
 @pytest.mark.asyncio

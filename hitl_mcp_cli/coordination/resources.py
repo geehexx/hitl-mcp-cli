@@ -1,7 +1,6 @@
 """MCP Resource definitions for coordination channels."""
 
 import json
-from typing import Any
 
 from fastmcp import FastMCP
 

@@ -1,7 +1,9 @@
 """FastMCP server for interactive user input."""
 
 import os
-from typing import Literal
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from typing import Any, Literal
 
 from fastmcp import FastMCP
 
@@ -10,8 +12,61 @@ from .ui import display_notification, prompt_checkbox, prompt_confirm, prompt_pa
 # Optional: Multi-agent coordination support
 ENABLE_COORDINATION = os.getenv("HITL_ENABLE_COORDINATION", "").lower() in ("1", "true", "yes")
 
+
+async def _start_coordination_tasks() -> list[str]:
+    """Start coordination background tasks.
+
+    Returns:
+        List of task names that were started
+    """
+    tasks = []
+
+    # These will be defined later in the module when ENABLE_COORDINATION is True
+    # Access them from globals to avoid forward reference issues
+    lock_manager = globals().get("coordination_lock_manager")
+    heartbeat_manager = globals().get("coordination_heartbeat_manager")
+
+    if lock_manager:
+        await lock_manager.start()
+        tasks.append("lock_cleanup")
+
+    if heartbeat_manager:
+        await heartbeat_manager.start()
+        tasks.append("heartbeat_monitor")
+
+    return tasks
+
+
+async def _stop_coordination_tasks() -> None:
+    """Stop coordination background tasks."""
+    lock_manager = globals().get("coordination_lock_manager")
+    heartbeat_manager = globals().get("coordination_heartbeat_manager")
+
+    if lock_manager:
+        await lock_manager.stop()
+
+    if heartbeat_manager:
+        await heartbeat_manager.stop()
+
+
+@asynccontextmanager
+async def coordination_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
+    """Lifespan context manager for coordination features.
+
+    Starts background tasks for lock cleanup and heartbeat monitoring when enabled.
+    """
+    tasks = await _start_coordination_tasks()
+
+    # Server is running
+    yield {"coordination_tasks": tasks}
+
+    # Cleanup on shutdown
+    await _stop_coordination_tasks()
+
+
 mcp = FastMCP(
     name="Interactive Input Server",
+    lifespan=coordination_lifespan if ENABLE_COORDINATION else None,
     instructions="""
 # Interactive User Input Server
 

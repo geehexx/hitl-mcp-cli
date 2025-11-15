@@ -9,7 +9,7 @@ from hitl_mcp_cli.coordination.channels import ChannelStore
 from hitl_mcp_cli.coordination.heartbeat import HeartbeatManager
 from hitl_mcp_cli.coordination.locks import LockManager
 from hitl_mcp_cli.coordination.ratelimit import RateLimiter
-from hitl_mcp_cli.coordination.schema import AuthenticationError, MessageType, RateLimitExceeded
+from hitl_mcp_cli.coordination.schema import MessageType, RateLimitExceeded
 
 
 @pytest.mark.asyncio

@@ -1,7 +1,6 @@
 """Channel-based message passing for multi-agent coordination."""
 
 import asyncio
-import json
 import time
 import uuid
 from collections import defaultdict
