@@ -1,10 +1,14 @@
 """FastMCP server for interactive user input."""
 
+import os
 from typing import Literal
 
 from fastmcp import FastMCP
 
 from .ui import display_notification, prompt_checkbox, prompt_confirm, prompt_path, prompt_select, prompt_text
+
+# Optional: Multi-agent coordination support
+ENABLE_COORDINATION = os.getenv("HITL_ENABLE_COORDINATION", "").lower() in ("1", "true", "yes")
 
 mcp = FastMCP(
     name="Interactive Input Server",
@@ -268,3 +272,68 @@ async def notify_completion(
         return {"acknowledged": True}
     except Exception as e:
         raise Exception(f"Notification display failed: {str(e)}") from e
+
+
+# Multi-Agent Coordination (Optional)
+# These are module-level so they can be accessed from cli.py for lifecycle management
+coordination_channel_store = None
+coordination_lock_manager = None
+
+if ENABLE_COORDINATION:
+    from .coordination.channels import ChannelStore
+    from .coordination.locks import LockManager
+    from .coordination.resources import register_coordination_resources
+    from .coordination.tools import register_coordination_tools
+
+    # Initialize coordination backends
+    coordination_channel_store = ChannelStore()
+    coordination_lock_manager = LockManager()
+
+    # Register MCP resources and tools
+    register_coordination_resources(mcp, coordination_channel_store)
+    register_coordination_tools(mcp, coordination_channel_store, coordination_lock_manager)
+
+    # Update server instructions
+    mcp.instructions += """
+
+## Multi-Agent Coordination (Enabled)
+
+This server also provides multi-agent coordination capabilities:
+
+### Coordination Tools
+- `join_coordination_channel`: Join a channel to communicate with other agents
+- `send_coordination_message`: Send structured messages to channel
+- `poll_coordination_channel`: Check for new messages (non-blocking)
+- `acquire_coordination_lock`: Acquire distributed lock for exclusive access
+- `release_coordination_lock`: Release a held lock
+- `leave_coordination_channel`: Leave a channel
+
+### Coordination Resources
+- `coordination://channels` - List all channels
+- `coordination://{channel}` - Read all messages in channel
+- `coordination://{channel}/{message_id}` - Read specific message
+- `coordination://{channel}/type/{type}` - Filter messages by type
+- `coordination://stats` - System statistics
+
+### Message Types
+Structured protocol for agent coordination:
+- Discovery: `init`, `acknowledgment`
+- Synchronization: `sync`, `capabilities`, `ownership`
+- Operational: `question`, `response`, `task_assign`, `task_complete`, `progress`
+- Control: `ready`, `standby`, `stop`, `done`
+- Conflict: `conflict_detected`, `conflict_resolved`
+
+### Example Workflow
+```python
+# Agent A (Primary)
+await join_coordination_channel("project", "agent-a", role="primary")
+await send_coordination_message("project", "agent-a", "init", "Hello")
+
+# Agent B (Subordinate)
+await join_coordination_channel("project", "agent-b", role="subordinate")
+msgs = await poll_coordination_channel("project", filter_type="init")
+await send_coordination_message("project", "agent-b", "acknowledgment", "Ready")
+```
+
+See documentation for full coordination protocol and patterns.
+"""
