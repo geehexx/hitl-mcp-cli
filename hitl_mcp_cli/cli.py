@@ -36,10 +36,22 @@ def main() -> None:
     parser.add_argument(
         "--no-banner", action="store_true", default=default_no_banner, help="Disable startup banner"
     )
+    parser.add_argument(
+        "--enable-coordination",
+        action="store_true",
+        default=os.getenv("HITL_ENABLE_COORDINATION", "").lower() in ("1", "true", "yes"),
+        help="Enable multi-agent coordination features",
+    )
 
     args = parser.parse_args()
 
+    # Set environment variable for server module
+    if args.enable_coordination:
+        os.environ["HITL_ENABLE_COORDINATION"] = "1"
+
     logger.info(f"Starting HITL MCP server on {args.host}:{args.port}")
+    if args.enable_coordination:
+        logger.info("Multi-agent coordination: ENABLED")
 
     # Display custom banner
     if not args.no_banner:

@@ -1,13 +1,72 @@
 """FastMCP server for interactive user input."""
 
-from typing import Literal
+import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from typing import Any, Literal
 
 from fastmcp import FastMCP
 
 from .ui import display_notification, prompt_checkbox, prompt_confirm, prompt_path, prompt_select, prompt_text
 
+# Optional: Multi-agent coordination support
+ENABLE_COORDINATION = os.getenv("HITL_ENABLE_COORDINATION", "").lower() in ("1", "true", "yes")
+
+
+async def _start_coordination_tasks() -> list[str]:
+    """Start coordination background tasks.
+
+    Returns:
+        List of task names that were started
+    """
+    tasks = []
+
+    # These will be defined later in the module when ENABLE_COORDINATION is True
+    # Access them from globals to avoid forward reference issues
+    lock_manager = globals().get("coordination_lock_manager")
+    heartbeat_manager = globals().get("coordination_heartbeat_manager")
+
+    if lock_manager:
+        await lock_manager.start()
+        tasks.append("lock_cleanup")
+
+    if heartbeat_manager:
+        await heartbeat_manager.start()
+        tasks.append("heartbeat_monitor")
+
+    return tasks
+
+
+async def _stop_coordination_tasks() -> None:
+    """Stop coordination background tasks."""
+    lock_manager = globals().get("coordination_lock_manager")
+    heartbeat_manager = globals().get("coordination_heartbeat_manager")
+
+    if lock_manager:
+        await lock_manager.stop()
+
+    if heartbeat_manager:
+        await heartbeat_manager.stop()
+
+
+@asynccontextmanager
+async def coordination_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
+    """Lifespan context manager for coordination features.
+
+    Starts background tasks for lock cleanup and heartbeat monitoring when enabled.
+    """
+    tasks = await _start_coordination_tasks()
+
+    # Server is running
+    yield {"coordination_tasks": tasks}
+
+    # Cleanup on shutdown
+    await _stop_coordination_tasks()
+
+
 mcp = FastMCP(
     name="Interactive Input Server",
+    lifespan=coordination_lifespan if ENABLE_COORDINATION else None,
     instructions="""
 # Interactive User Input Server
 
@@ -268,3 +327,118 @@ async def notify_completion(
         return {"acknowledged": True}
     except Exception as e:
         raise Exception(f"Notification display failed: {str(e)}") from e
+
+
+# Multi-Agent Coordination (Optional)
+# These are module-level so they can be accessed from cli.py for lifecycle management
+coordination_channel_store = None
+coordination_lock_manager = None
+coordination_auth_manager = None
+coordination_rate_limiter = None
+coordination_heartbeat_manager = None
+
+if ENABLE_COORDINATION:
+    from .coordination.auth import AuthManager
+    from .coordination.channels import ChannelStore
+    from .coordination.heartbeat import HeartbeatManager
+    from .coordination.locks import LockManager
+    from .coordination.ratelimit import RateLimiter
+    from .coordination.resources import register_coordination_resources
+    from .coordination.tools_enhanced import register_coordination_tools_enhanced
+
+    # Initialize coordination backends
+    coordination_channel_store = ChannelStore()
+    coordination_lock_manager = LockManager()
+
+    # Optional features (check environment variables)
+    ENABLE_AUTH = os.getenv("HITL_COORDINATION_AUTH", "").lower() in ("1", "true", "yes")
+    ENABLE_RATE_LIMIT = os.getenv("HITL_COORDINATION_RATE_LIMIT", "1").lower() in ("1", "true", "yes")
+    ENABLE_HEARTBEAT = os.getenv("HITL_COORDINATION_HEARTBEAT", "1").lower() in ("1", "true", "yes")
+
+    if ENABLE_AUTH:
+        coordination_auth_manager = AuthManager()
+        # Register default agent for development (remove in production)
+        if os.getenv("HITL_DEV_MODE", "").lower() in ("1", "true", "yes"):
+            dev_key = coordination_auth_manager.register_agent(
+                "dev-agent", allowed_channels={"*"}, permissions={"read", "write", "lock"}
+            )
+            import logging
+
+            logging.getLogger(__name__).info(f"Dev agent registered with key: {dev_key[:8]}...")
+
+    if ENABLE_RATE_LIMIT:
+        coordination_rate_limiter = RateLimiter(
+            default_per_agent_limit=int(os.getenv("HITL_RATE_LIMIT_PER_AGENT", "100")),
+            global_limit=int(os.getenv("HITL_RATE_LIMIT_GLOBAL", "1000")),
+        )
+
+    if ENABLE_HEARTBEAT:
+        coordination_heartbeat_manager = HeartbeatManager(
+            heartbeat_interval=int(os.getenv("HITL_HEARTBEAT_INTERVAL", "30")),
+            missing_threshold=int(os.getenv("HITL_HEARTBEAT_MISSING", "2")),
+            dead_threshold=int(os.getenv("HITL_HEARTBEAT_DEAD", "3")),
+        )
+
+        # Register callback to release locks from dead agents
+        def release_dead_agent_locks(agent_id: str):
+            import asyncio
+
+            asyncio.create_task(coordination_lock_manager.release_all(agent_id))
+
+        coordination_heartbeat_manager.register_dead_callback(release_dead_agent_locks)
+
+    # Register MCP resources and tools
+    register_coordination_resources(mcp, coordination_channel_store)
+    register_coordination_tools_enhanced(
+        mcp,
+        coordination_channel_store,
+        coordination_lock_manager,
+        auth_manager=coordination_auth_manager,
+        rate_limiter=coordination_rate_limiter,
+        heartbeat_manager=coordination_heartbeat_manager,
+    )
+
+    # Update server instructions
+    mcp.instructions += """
+
+## Multi-Agent Coordination (Enabled)
+
+This server also provides multi-agent coordination capabilities:
+
+### Coordination Tools
+- `join_coordination_channel`: Join a channel to communicate with other agents
+- `send_coordination_message`: Send structured messages to channel
+- `poll_coordination_channel`: Check for new messages (non-blocking)
+- `acquire_coordination_lock`: Acquire distributed lock for exclusive access
+- `release_coordination_lock`: Release a held lock
+- `leave_coordination_channel`: Leave a channel
+
+### Coordination Resources
+- `coordination://channels` - List all channels
+- `coordination://{channel}` - Read all messages in channel
+- `coordination://{channel}/{message_id}` - Read specific message
+- `coordination://{channel}/type/{type}` - Filter messages by type
+- `coordination://stats` - System statistics
+
+### Message Types
+Structured protocol for agent coordination:
+- Discovery: `init`, `acknowledgment`
+- Synchronization: `sync`, `capabilities`, `ownership`
+- Operational: `question`, `response`, `task_assign`, `task_complete`, `progress`
+- Control: `ready`, `standby`, `stop`, `done`
+- Conflict: `conflict_detected`, `conflict_resolved`
+
+### Example Workflow
+```python
+# Agent A (Primary)
+await join_coordination_channel("project", "agent-a", role="primary")
+await send_coordination_message("project", "agent-a", "init", "Hello")
+
+# Agent B (Subordinate)
+await join_coordination_channel("project", "agent-b", role="subordinate")
+msgs = await poll_coordination_channel("project", filter_type="init")
+await send_coordination_message("project", "agent-b", "acknowledgment", "Ready")
+```
+
+See documentation for full coordination protocol and patterns.
+"""
