@@ -1,0 +1,76 @@
+{
+  "description": "Claude Code configuration for HITL MCP CLI project",
+  "permissions": {
+    "deny": [
+      "Read(**/__pycache__/**)",
+      "Read(**/*.pyc)",
+      "Read(**/.pytest_cache/**)",
+      "Read(**/.mypy_cache/**)",
+      "Read(**/.ruff_cache/**)",
+      "Read(**/venv/**)",
+      "Read(**/.venv/**)",
+      "Read(**/env/**)",
+      "Read(**/.env/**)",
+      "Read(**/node_modules/**)",
+      "Read(**/.git/**)",
+      "Read(**/.git/objects/**)",
+      "Read(**/.git/hooks/**)",
+      "Read(**/uv.lock)",
+      "Read(**/.DS_Store)",
+      "Read(**/*.egg-info/**)",
+      "Read(**/dist/**)",
+      "Read(**/build/**)",
+      "Read(**/.coverage)",
+      "Read(**/htmlcov/**)",
+      "Read(**/*.log)",
+      "Read(**/.envrc)",
+      "Read(**/.env.local)",
+      "Read(**/.env.*.local)",
+      "Read(**/credentials.json)",
+      "Read(**/secrets.json)",
+      "Read(**/*.key)",
+      "Read(**/*.pem)",
+      "Read(**/*.p12)",
+      "Read(**/*.pfx)",
+      "Read(**/id_rsa*)",
+      "Read(**/.ssh/**)",
+      "Read(**/.aws/**)",
+      "Read(**/.config/gcloud/**)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": {
+      "commands": [
+        {
+          "command": ".claude/hooks/session_start.sh",
+          "timeout": 30000
+        }
+      ]
+    },
+    "UserPromptSubmit": {
+      "commands": [
+        {
+          "command": ".claude/hooks/user_prompt_submit.sh",
+          "timeout": 5000
+        }
+      ]
+    }
+  },
+  "context": {
+    "alwaysInclude": [
+      "README.md",
+      "CONTRIBUTING.md",
+      "pyproject.toml",
+      ".claude/rules.md"
+    ],
+    "priority": [
+      "hitl_mcp_cli/**/*.py",
+      "tests/**/*.py",
+      "docs/**/*.md"
+    ]
+  },
+  "rules": {
+    "description": "Project-specific rules for Claude Code",
+    "file": ".claude/rules.md"
+  }
+}
