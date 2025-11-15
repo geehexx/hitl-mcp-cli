@@ -12,17 +12,28 @@ Key Design Principles:
 - Secure: Authentication, authorization, and message signing
 """
 
+from .auth import Agent, AuthManager
 from .channels import Channel, ChannelStore, Message
+from .heartbeat import AgentHealth, HeartbeatManager
 from .locks import Lock, LockManager
+from .ratelimit import RateLimiter, TokenBucket
 from .schema import CoordinationError, MessageSchema, MessageType
+from .signing import MessageSigner
 
 __all__ = [
+    "Agent",
+    "AgentHealth",
+    "AuthManager",
     "Channel",
     "ChannelStore",
     "CoordinationError",
+    "HeartbeatManager",
     "Lock",
     "LockManager",
     "Message",
     "MessageSchema",
+    "MessageSigner",
     "MessageType",
+    "RateLimiter",
+    "TokenBucket",
 ]
