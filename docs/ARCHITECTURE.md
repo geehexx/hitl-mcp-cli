@@ -8,13 +8,13 @@ HITL MCP CLI is built as a layered architecture that separates concerns between 
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        AI Agent / MCP Client                 │
-│                    (Claude, GPT, Custom Agent)               │
+│                        AI Agent / MCP Client                │
+│                    (Claude, GPT, Custom Agent)              │
 └────────────────────────────┬────────────────────────────────┘
                              │ HTTP (Streamable-HTTP Transport)
                              │ MCP Protocol (JSON-RPC)
 ┌────────────────────────────▼────────────────────────────────┐
-│                      FastMCP Server Layer                    │
+│                      FastMCP Server Layer                   │
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │  Tool Registry & Schema Generation                   │   │
 │  │  - hitl_collect / hitl_ask                           │   │
@@ -25,7 +25,7 @@ HITL MCP CLI is built as a layered architecture that separates concerns between 
 └────────────────────────────┬────────────────────────────────┘
                              │ Async Function Calls
 ┌────────────────────────────▼────────────────────────────────┐
-│                        UI Layer                              │
+│                        UI Layer                             │
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │  Prompt Wrappers (prompts.py)                        │   │
 │  │  - prompt_text, prompt_select, prompt_checkbox       │   │
@@ -43,16 +43,16 @@ HITL MCP CLI is built as a layered architecture that separates concerns between 
 └────────────────────────────┬────────────────────────────────┘
                              │ Terminal I/O
 ┌────────────────────────────▼────────────────────────────────┐
-│                   Terminal Libraries                         │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │  InquirerPy  │  │     Rich     │  │   asyncio    │      │
-│  │  (Prompts)   │  │  (Styling)   │  │  (Async I/O) │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
+│                   Terminal Libraries                        │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
+│  │  InquirerPy  │  │     Rich     │  │   asyncio    │       │
+│  │  (Prompts)   │  │  (Styling)   │  │  (Async I/O) │       │
+│  └──────────────┘  └──────────────┘  └──────────────┘       │
 └────────────────────────────┬────────────────────────────────┘
                              │
 ┌────────────────────────────▼────────────────────────────────┐
-│                           User                               │
-│                    (Terminal Interface)                      │
+│                           User                              │
+│                    (Terminal Interface)                     │
 └─────────────────────────────────────────────────────────────┘
 ```
 

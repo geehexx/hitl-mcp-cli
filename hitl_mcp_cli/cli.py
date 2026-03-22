@@ -56,9 +56,25 @@ def main() -> None:
         "--no-banner", action="store_true", default=default_no_banner, help="Disable startup banner"
     )
 
+    # TUI mode
+    default_tui = os.getenv("HITL_TUI", "").lower() in ("1", "true", "yes")
+    parser.add_argument(
+        "--tui", action="store_true", default=default_tui, help="Launch Textual TUI (env: HITL_TUI=1)"
+    )
+
     args = parser.parse_args()
 
     logger.info(f"Starting HITL MCP server on {args.host}:{args.port}")
+
+    if args.tui:
+        from .server import configure_tui_mode
+        from .tui import HITLApp, HITLQueue
+
+        queue = HITLQueue()
+        app = HITLApp(hitl_queue=queue, host=args.host, port=args.port, mcp_app=mcp.http_app())
+        configure_tui_mode(queue, app)
+        app.run()
+        return
 
     # Display custom banner
     if not args.no_banner:

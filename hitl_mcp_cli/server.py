@@ -1,16 +1,43 @@
 """FastMCP server for interactive user input."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import time
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from fastmcp import FastMCP
 
 from .interaction_log import ResultType, log_interaction
 from .ui import display_notification, prompt_checkbox, prompt_confirm, prompt_path, prompt_select, prompt_text
 
+if TYPE_CHECKING:
+    from .tui.app import HITLApp
+    from .tui.queue import HITLQueue
+
 logger = logging.getLogger(__name__)
+
+_tui_queue: HITLQueue | None = None
+_tui_app: HITLApp | None = None
+
+
+def configure_tui_mode(queue: HITLQueue, app: HITLApp) -> None:
+    """Configure server to route HITL requests through the TUI queue."""
+    global _tui_queue, _tui_app
+    _tui_queue, _tui_app = queue, app
+
+
+async def _tui_enqueue(tool: str, params: dict[str, Any]) -> Any:
+    """Enqueue a request on the TUI queue and await the user's response."""
+    from .tui.queue import HITLRequest
+
+    assert _tui_queue is not None
+    future: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
+    request = HITLRequest(tool=tool, params=params, future=future)
+    await _tui_queue.put(request)
+    return await future
+
 
 mcp = FastMCP(
     name="HITL MCP Server",
@@ -45,11 +72,25 @@ async def hitl_collect(
         The user's input string
     """
     t0 = time.monotonic()
-    result = await _collect_input(message, input_type, default, validation_pattern, validation_message, notes)
+    if _tui_queue is not None:
+        result = await _tui_enqueue(
+            "hitl_collect",
+            {
+                "message": message,
+                "input_type": input_type,
+                "default": default,
+                "validation_pattern": validation_pattern,
+                "validation_message": validation_message,
+            },
+        )
+    else:
+        result = await _collect_input(
+            message, input_type, default, validation_pattern, validation_message, notes
+        )
     ms = int((time.monotonic() - t0) * 1000)
     rt: ResultType = "cancel" if isinstance(result, dict) else "value"
     log_interaction("hitl_collect", ms, rt)
-    return result
+    return cast("str | dict[str, str]", result)
 
 
 @mcp.tool()
@@ -63,11 +104,25 @@ async def hitl_ask(
 ) -> str | dict[str, str]:
     """Alias for hitl_collect. Collect a single input value from the user."""
     t0 = time.monotonic()
-    result = await _collect_input(message, input_type, default, validation_pattern, validation_message, notes)
+    if _tui_queue is not None:
+        result = await _tui_enqueue(
+            "hitl_collect",
+            {
+                "message": message,
+                "input_type": input_type,
+                "default": default,
+                "validation_pattern": validation_pattern,
+                "validation_message": validation_message,
+            },
+        )
+    else:
+        result = await _collect_input(
+            message, input_type, default, validation_pattern, validation_message, notes
+        )
     ms = int((time.monotonic() - t0) * 1000)
     rt: ResultType = "cancel" if isinstance(result, dict) else "value"
     log_interaction("hitl_ask", ms, rt)
-    return result
+    return cast("str | dict[str, str]", result)
 
 
 async def _collect_input(
@@ -135,6 +190,24 @@ async def hitl_choose(
     assert choices is not None  # guaranteed by validation above
 
     t0 = time.monotonic()
+
+    if _tui_queue is not None:
+        result = await _tui_enqueue(
+            "hitl_choose",
+            {
+                "message": message,
+                "choices": choices,
+                "multiple": multiple,
+            },
+        )
+        ms = int((time.monotonic() - t0) * 1000)
+        log_interaction("hitl_choose", ms, "value")
+        if display_to_value and isinstance(result, str):
+            return display_to_value.get(result, result)
+        if display_to_value and isinstance(result, list):
+            return [display_to_value.get(str(r), str(r)) for r in result]
+        return cast("str | list[str] | dict[str, str] | dict[str, Any]", result)
+
     try:
         if multiple:
             raw: Any = await prompt_checkbox(message, choices, notes)
@@ -186,6 +259,32 @@ async def hitl_confirm(
         When timeout_seconds > 0, also includes 'timed_out' (bool).
     """
     t0 = time.monotonic()
+
+    if _tui_queue is not None:
+        tui_params: dict[str, Any] = {
+            "message": message,
+            "severity": severity,
+            "context": context,
+        }
+        try:
+            if timeout_seconds > 0:
+                tui_result: dict[str, Any] = await asyncio.wait_for(
+                    _tui_enqueue("hitl_confirm", tui_params),
+                    timeout=timeout_seconds,
+                )
+                ms = int((time.monotonic() - t0) * 1000)
+                log_interaction("hitl_confirm", ms, "value")
+                tui_result["timed_out"] = False
+                return tui_result
+            tui_result = await _tui_enqueue("hitl_confirm", tui_params)
+            ms = int((time.monotonic() - t0) * 1000)
+            log_interaction("hitl_confirm", ms, "value")
+            return tui_result
+        except TimeoutError:
+            ms = int((time.monotonic() - t0) * 1000)
+            log_interaction("hitl_confirm", ms, "timeout")
+            return {"action": "decline", "timed_out": True}
+
     try:
         if context:
             display_notification("Context", context, "info")
@@ -245,6 +344,13 @@ async def hitl_notify(
         Dict with 'acknowledged' key (always True)
     """
     t0 = time.monotonic()
+
+    if _tui_queue is not None and _tui_app is not None:
+        _tui_app.call_from_thread(_tui_app.stream_output, title or "agent", message, level)
+        ms = int((time.monotonic() - t0) * 1000)
+        log_interaction("hitl_notify", ms, "value")
+        return {"acknowledged": True}
+
     try:
         display_notification(title or level.capitalize(), message, level, notes)
         ms = int((time.monotonic() - t0) * 1000)

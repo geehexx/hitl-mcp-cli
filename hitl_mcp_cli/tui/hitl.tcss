@@ -1,0 +1,20 @@
+#output-pane {
+    height: 2fr;
+    border-bottom: solid $panel-darken-1;
+}
+
+#output-log {
+    height: 1fr;
+}
+
+#queue-pane {
+    height: 1fr;
+    min-height: 5;
+    padding: 0 1;
+}
+
+#queue-status {
+    height: 1;
+    background: $panel;
+    padding: 0 1;
+}
