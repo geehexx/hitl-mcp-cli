@@ -41,12 +41,14 @@ class ConfirmScreen(ModalScreen[dict[str, Any]]):
     """
 
     def __init__(self, request: HITLRequest) -> None:
+        """Initialize confirmation screen from HITL request."""
         super().__init__()
         self._message: str = request.params.get("message", "")
         self._severity: str = request.params.get("severity", "medium")
         self._ctx_text: str | None = request.params.get("context")
 
     def compose(self) -> ComposeResult:
+        """Compose the confirmation dialog UI."""
         severity_class = f"severity-{self._severity}"
         with Vertical(id="confirm-dialog", classes=severity_class):
             if self._ctx_text:
@@ -61,14 +63,17 @@ class ConfirmScreen(ModalScreen[dict[str, Any]]):
 
     @on(Button.Pressed, "#yes")
     def _on_yes(self) -> None:
+        """Handle yes button press."""
         self.dismiss({"action": "accept"})
 
     @on(Button.Pressed, "#no")
     def _on_no(self) -> None:
+        """Handle no button press."""
         self.dismiss({"action": "decline"})
 
     @on(Input.Submitted, "#high-input")
     def _on_high_submit(self, event: Input.Submitted) -> None:
+        """Handle high-severity confirmation input submission."""
         if event.value.strip().lower() == "yes":
             self.dismiss({"action": "accept"})
         else:
@@ -99,6 +104,7 @@ class CollectScreen(ModalScreen[str | dict[str, str]]):
     """
 
     def __init__(self, request: HITLRequest) -> None:
+        """Initialize collection screen from HITL request."""
         super().__init__()
         self._message: str = request.params.get("message", "")
         self._input_type: str = request.params.get("input_type", "text")
@@ -107,6 +113,7 @@ class CollectScreen(ModalScreen[str | dict[str, str]]):
         self._validation_message: str | None = request.params.get("validation_message")
 
     def compose(self) -> ComposeResult:
+        """Compose the collection dialog UI."""
         with Vertical(id="collect-dialog"):
             yield Label(self._message)
             if self._input_type == "multiline":
@@ -127,6 +134,7 @@ class CollectScreen(ModalScreen[str | dict[str, str]]):
                 yield Button("Cancel", variant="error", id="cancel")
 
     def _get_value(self) -> str:
+        """Get the current input value from the widget."""
         widget = self.query_one("#collect-input")
         if isinstance(widget, TextArea):
             return widget.text
@@ -135,12 +143,14 @@ class CollectScreen(ModalScreen[str | dict[str, str]]):
         return ""
 
     def _validate(self, value: str) -> bool:
+        """Validate input against the validation pattern."""
         if self._validation_pattern:
             return bool(re.match(self._validation_pattern, value))
         return True
 
     @on(Button.Pressed, "#submit")
     def _on_submit(self) -> None:
+        """Handle submit button press."""
         value = self._get_value()
         if not self._validate(value):
             self.query_one("#validation-msg").add_class("visible")
@@ -149,10 +159,12 @@ class CollectScreen(ModalScreen[str | dict[str, str]]):
 
     @on(Button.Pressed, "#cancel")
     def _on_cancel(self) -> None:
+        """Handle cancel button press."""
         self.dismiss({"action": "cancel"})
 
     @on(Input.Submitted, "#collect-input")
     def _on_input_submit(self, event: Input.Submitted) -> None:
+        """Handle input submission."""
         self._on_submit()
 
 
@@ -173,6 +185,7 @@ class ChooseScreen(ModalScreen[str | list[str] | dict[str, str]]):
     """
 
     def __init__(self, request: HITLRequest) -> None:
+        """Initialize choice screen from HITL request."""
         super().__init__()
         self._message: str = request.params.get("message", "")
         self._choices: list[str] = request.params.get("choices", [])
@@ -180,6 +193,7 @@ class ChooseScreen(ModalScreen[str | list[str] | dict[str, str]]):
         self._selected: set[str] = set()
 
     def compose(self) -> ComposeResult:
+        """Compose the choice selection dialog UI."""
         with Vertical(id="choose-dialog"):
             yield Label(self._message)
             if self._multiple:
@@ -197,6 +211,7 @@ class ChooseScreen(ModalScreen[str | list[str] | dict[str, str]]):
 
     @on(Button.Pressed, ".choice-btn")
     def _toggle_choice(self, event: Button.Pressed) -> None:
+        """Toggle a choice button selection state."""
         btn = event.button
         label = str(btn.label)
         choice = label.lstrip("☐☑ ")
@@ -209,10 +224,12 @@ class ChooseScreen(ModalScreen[str | list[str] | dict[str, str]]):
 
     @on(Button.Pressed, "#done")
     def _on_done(self) -> None:
+        """Handle done button press for multiple selection."""
         self.dismiss(sorted(self._selected))
 
     @on(Button.Pressed, "#ok")
     def _on_ok(self) -> None:
+        """Handle OK button press for single selection."""
         select = self.query_one("#choose-select", Select)
         value = select.value
         if value is not Select.BLANK:
@@ -222,6 +239,7 @@ class ChooseScreen(ModalScreen[str | list[str] | dict[str, str]]):
 
     @on(Button.Pressed, "#cancel")
     def _on_cancel(self) -> None:
+        """Handle cancel button press."""
         self.dismiss({"action": "cancel"})
 
 
@@ -248,12 +266,14 @@ class NotifyScreen(ModalScreen[bool]):
     """
 
     def __init__(self, request: HITLRequest) -> None:
+        """Initialize notification screen from HITL request."""
         super().__init__()
         self._message: str = request.params.get("message", "")
         self._level: str = request.params.get("level", "info")
         self._title_text: str | None = request.params.get("title")
 
     def compose(self) -> ComposeResult:
+        """Compose the notification dialog UI."""
         level_class = f"level-{self._level}"
         with Vertical(id="notify-dialog", classes=level_class):
             if self._title_text:
@@ -262,14 +282,17 @@ class NotifyScreen(ModalScreen[bool]):
             yield Button("OK", variant="primary", id="dismiss")
 
     def on_mount(self) -> None:
+        """Set up auto-dismiss timer on mount."""
         self.set_timer(self.AUTO_DISMISS_SECONDS, self._auto_dismiss)
 
     async def _auto_dismiss(self) -> None:
+        """Auto-dismiss the notification after timeout."""
         if self.is_current:
             self.dismiss(True)
 
     @on(Button.Pressed, "#dismiss")
     def _on_dismiss(self) -> None:
+        """Handle dismiss button press."""
         self.dismiss(True)
 
 
