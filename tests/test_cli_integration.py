@@ -17,7 +17,7 @@ def test_cli_main_with_no_banner() -> None:
     from hitl_mcp_cli.cli import main
 
     with patch("hitl_mcp_cli.cli.mcp.run") as mock_run:
-        with patch("sys.argv", ["hitl-mcp", "--no-banner"]):
+        with patch("sys.argv", ["hitl-mcp", "--no-tui", "--no-banner"]):
             with patch("hitl_mcp_cli.cli.display_banner") as mock_banner:
                 mock_run.side_effect = KeyboardInterrupt()  # Exit immediately
 
@@ -35,7 +35,7 @@ def test_cli_main_with_banner() -> None:
     from hitl_mcp_cli.cli import main
 
     with patch("hitl_mcp_cli.cli.mcp.run") as mock_run:
-        with patch("sys.argv", ["hitl-mcp"]):
+        with patch("sys.argv", ["hitl-mcp", "--no-tui"]):
             with patch("hitl_mcp_cli.cli.display_banner") as mock_banner:
                 mock_run.side_effect = KeyboardInterrupt()
 
@@ -53,7 +53,7 @@ def test_cli_main_with_custom_port() -> None:
     from hitl_mcp_cli.cli import main
 
     with patch("hitl_mcp_cli.cli.mcp.run") as mock_run:
-        with patch("sys.argv", ["hitl-mcp", "--port", "8080"]):
+        with patch("sys.argv", ["hitl-mcp", "--no-tui", "--port", "8080"]):
             with patch("hitl_mcp_cli.cli.display_banner"):
                 mock_run.side_effect = KeyboardInterrupt()
 
@@ -72,7 +72,7 @@ def test_cli_main_with_custom_host() -> None:
     from hitl_mcp_cli.cli import main
 
     with patch("hitl_mcp_cli.cli.mcp.run") as mock_run:
-        with patch("sys.argv", ["hitl-mcp", "--host", "0.0.0.0"]):
+        with patch("sys.argv", ["hitl-mcp", "--no-tui", "--host", "0.0.0.0"]):
             with patch("hitl_mcp_cli.cli.display_banner"):
                 mock_run.side_effect = KeyboardInterrupt()
 
@@ -90,7 +90,7 @@ def test_cli_main_keyboard_interrupt() -> None:
     from hitl_mcp_cli.cli import main
 
     with patch("hitl_mcp_cli.cli.mcp.run") as mock_run:
-        with patch("sys.argv", ["hitl-mcp", "--no-banner"]):
+        with patch("sys.argv", ["hitl-mcp", "--no-tui", "--no-banner"]):
             mock_run.side_effect = KeyboardInterrupt()
             # Should not raise, just exit gracefully
             main()
@@ -101,7 +101,7 @@ def test_cli_main_generic_exception() -> None:
     from hitl_mcp_cli.cli import main
 
     with patch("hitl_mcp_cli.cli.mcp.run") as mock_run:
-        with patch("sys.argv", ["hitl-mcp", "--no-banner"]):
+        with patch("sys.argv", ["hitl-mcp", "--no-tui", "--no-banner"]):
             with patch("hitl_mcp_cli.cli.logger") as mock_logger:
                 mock_run.side_effect = RuntimeError("Test error")
 
@@ -117,7 +117,7 @@ def test_cli_fastmcp_show_banner_disabled() -> None:
     from hitl_mcp_cli.cli import main
 
     with patch("hitl_mcp_cli.cli.mcp.run") as mock_run:
-        with patch("sys.argv", ["hitl-mcp", "--no-banner"]):
+        with patch("sys.argv", ["hitl-mcp", "--no-tui", "--no-banner"]):
             mock_run.side_effect = KeyboardInterrupt()
 
             try:

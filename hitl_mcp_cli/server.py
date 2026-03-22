@@ -30,6 +30,8 @@ def configure_tui_mode(queue: HITLQueue, app: HITLApp) -> None:
 
 async def _tui_enqueue(tool: str, params: dict[str, Any]) -> Any:
     """Enqueue a request on the TUI queue and await the user's response."""
+    import threading
+
     from .tui.queue import HITLRequest
 
     assert _tui_queue is not None
@@ -39,6 +41,12 @@ async def _tui_enqueue(tool: str, params: dict[str, Any]) -> Any:
     future: asyncio.Future[Any] = loop.create_future()
     request = HITLRequest(tool=tool, params=params, future=future)
     await _tui_queue.put(request)
+
+    if _tui_app is not None:
+        project_id = params.get("project_id")
+        session_id = f"thread-{threading.current_thread().ident}"
+        _tui_app.call_from_thread(_tui_app.record_session_activity, session_id, tool, project_id)
+
     return await future
 
 
@@ -354,6 +362,10 @@ async def hitl_notify(
 
     if _tui_queue is not None and _tui_app is not None:
         _tui_app.call_from_thread(_tui_app.stream_output, title or "agent", message, level)
+        import threading
+
+        session_id = f"thread-{threading.current_thread().ident}"
+        _tui_app.call_from_thread(_tui_app.record_session_activity, session_id, "hitl_notify", None)
         ms = int((time.monotonic() - t0) * 1000)
         log_interaction("hitl_notify", ms, "value", message=message, notes=notes)
         return {"acknowledged": True}

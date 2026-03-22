@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-03-22
+
+### Changed
+- TUI mode is now the default (previously required `--tui` flag)
+- Added `--no-tui` flag for headless/CI environments (env: `HITL_NO_TUI=1`)
+- `--tui` flag kept as no-op for backward compatibility
+
 ## [0.7.0] - 2026-03-22
 
 ### Added

@@ -1,20 +1,48 @@
-#output-pane {
-    height: 2fr;
-    border-bottom: solid $panel-darken-1;
+/* Three-pane HITL TUI layout */
+
+#main-pane {
+    height: 1fr;
+}
+
+#sessions-pane {
+    width: 1fr;
+    min-width: 20;
+    border-right: solid $panel-darken-1;
+}
+
+#activity-pane {
+    width: 2fr;
+    border-right: solid $panel-darken-1;
+}
+
+#queue-pane {
+    width: 1fr;
+    min-width: 20;
+}
+
+.pane-title {
+    height: 1;
+    background: $panel-darken-1;
+    padding: 0 1;
+    text-style: bold;
+    width: 100%;
 }
 
 #output-log {
     height: 1fr;
 }
 
-#queue-pane {
+#sessions-table {
     height: 1fr;
-    min-height: 5;
-    padding: 0 1;
 }
 
-#queue-status {
+#queue-table {
+    height: 1fr;
+}
+
+#status-bar {
     height: 1;
-    background: $panel;
+    background: $panel-darken-2;
     padding: 0 1;
+    dock: bottom;
 }

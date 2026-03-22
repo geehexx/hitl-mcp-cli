@@ -48,7 +48,7 @@ def test_cli_main_server_exception() -> None:
         patch("hitl_mcp_cli.cli.display_banner"),
         patch("hitl_mcp_cli.cli.mcp") as mock_mcp,
     ):
-        mock_args.return_value = MagicMock(host="127.0.0.1", port=5555, no_banner=True, tui=False)
+        mock_args.return_value = MagicMock(host="127.0.0.1", port=5555, no_banner=True, no_tui=True)
         mock_mcp.run.side_effect = RuntimeError("boom")
 
         with pytest.raises(RuntimeError, match="boom"):
@@ -64,7 +64,7 @@ def test_cli_main_keyboard_interrupt() -> None:
         patch("hitl_mcp_cli.cli.display_banner"),
         patch("hitl_mcp_cli.cli.mcp") as mock_mcp,
     ):
-        mock_args.return_value = MagicMock(host="127.0.0.1", port=5555, no_banner=True, tui=False)
+        mock_args.return_value = MagicMock(host="127.0.0.1", port=5555, no_banner=True, no_tui=True)
         mock_mcp.run.side_effect = KeyboardInterrupt()
         main()  # should not raise
 
@@ -82,7 +82,7 @@ def test_cli_tui_mode() -> None:
         patch("hitl_mcp_cli.tui.app.HITLApp.run") as mock_run,
         patch("hitl_mcp_cli.cli.mcp") as mock_mcp,
     ):
-        mock_args.return_value = MagicMock(host="127.0.0.1", port=5555, no_banner=True, tui=True)
+        mock_args.return_value = MagicMock(host="127.0.0.1", port=5555, no_banner=True, no_tui=False)
         mock_mcp.http_app.return_value = MagicMock()
         main()
         mock_configure.assert_called_once()

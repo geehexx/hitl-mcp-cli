@@ -94,20 +94,23 @@ uv tool install hitl-mcp-cli
 ### Start the Server
 
 ```bash
-# Default: localhost:5555
+# Default: TUI mode on localhost:5555
 hitl-mcp
 
 # Custom host/port
 hitl-mcp --host 0.0.0.0 --port 8080
 
-# Disable banner
-hitl-mcp --no-banner
+# Headless mode (CI/scripts, no TUI)
+hitl-mcp --no-tui
+
+# Disable banner (headless mode only)
+hitl-mcp --no-tui --no-banner
 
 # Using environment variables
 export HITL_HOST=0.0.0.0
 export HITL_PORT=8080
 export HITL_LOG_LEVEL=INFO
-export HITL_NO_BANNER=true
+export HITL_NO_TUI=true
 hitl-mcp
 ```
 
@@ -116,6 +119,7 @@ hitl-mcp
 - `HITL_PORT`: Server port (default: 5555)
 - `HITL_LOG_LEVEL`: Logging level - DEBUG, INFO, WARNING, ERROR (default: ERROR)
 - `HITL_NO_BANNER`: Disable startup banner - true/false (default: false)
+- `HITL_NO_TUI`: Disable TUI mode - true/false (default: false)
 
 ### Configure Your AI Agent
 
@@ -508,6 +512,35 @@ HITL MCP CLI is designed to be accessible:
 - **✅ Terminal compatibility**: Works with screen readers through terminal emulators
 
 See [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) for detailed accessibility information, testing methodology, and recommendations for users with diverse needs.
+
+---
+
+## 💻 VS Code Terminal
+
+For the best experience in VS Code's integrated terminal, add to your `settings.json`:
+
+```json
+{
+  "terminal.integrated.allowChords": false,
+  "terminal.integrated.sendKeybindingsToShell": true
+}
+```
+
+This ensures `Ctrl+\` (command palette) and other key bindings reach the TUI.
+
+> **Note**: `ctrl+b` and `ctrl+\` may be intercepted by VS Code. Add these to `commandsToSkipShell` in your VS Code settings, or use `f2` (log level) and `f3` (toggle sessions) as alternatives.
+
+### Key bindings
+
+| Key | Action |
+|-----|--------|
+| `q` | Quit |
+| `ctrl+l` | Clear activity log |
+| `ctrl+b` | Toggle sessions panel |
+| `f2` | Cycle log level (DEBUG/INFO/WARNING/ERROR) |
+| `f3` | Toggle sessions panel (VS Code-safe alternative) |
+| `ctrl+\` | Command palette |
+| `escape` | Cancel/close dialog |
 
 ---
 

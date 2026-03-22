@@ -292,7 +292,7 @@ async def test_stateless_http_transport() -> None:
         from hitl_mcp_cli.cli import main
 
         with patch("argparse.ArgumentParser.parse_args") as mock_args:
-            mock_args.return_value = MagicMock(host="127.0.0.1", port=5555, no_banner=True, tui=False)
+            mock_args.return_value = MagicMock(host="127.0.0.1", port=5555, no_banner=True, no_tui=True)
             main()
 
         mock_run.assert_called_once()

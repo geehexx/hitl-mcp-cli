@@ -56,17 +56,22 @@ def main() -> None:
         "--no-banner", action="store_true", default=default_no_banner, help="Disable startup banner"
     )
 
-    # TUI mode
-    default_tui = os.getenv("HITL_TUI", "").lower() in ("1", "true", "yes")
+    # TUI mode (default: on)
+    default_no_tui = os.getenv("HITL_NO_TUI", "").lower() in ("1", "true", "yes")
     parser.add_argument(
-        "--tui", action="store_true", default=default_tui, help="Launch Textual TUI (env: HITL_TUI=1)"
+        "--no-tui",
+        action="store_true",
+        default=default_no_tui,
+        help="Disable TUI mode (headless/CI, env: HITL_NO_TUI=1)",
     )
+    # Backward compat: --tui is a no-op (TUI is now the default)
+    parser.add_argument("--tui", action="store_true", default=True, help=argparse.SUPPRESS)
 
     args = parser.parse_args()
 
     logger.info(f"Starting HITL MCP server on {args.host}:{args.port}")
 
-    if args.tui:
+    if not args.no_tui:
         from .server import configure_tui_mode
         from .tui import HITLApp, HITLQueue
 

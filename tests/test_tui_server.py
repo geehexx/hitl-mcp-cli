@@ -132,7 +132,8 @@ class TestHitlNotifyTuiMode:
 
         result = await _hitl_notify(message="Done!", title="Build")
         assert result == {"acknowledged": True}
-        app.call_from_thread.assert_called_once_with(app.stream_output, "Build", "Done!", "info")
+        assert app.call_from_thread.call_count == 2
+        app.call_from_thread.assert_any_call(app.stream_output, "Build", "Done!", "info")
 
     @pytest.mark.asyncio
     async def test_notify_falls_through_without_tui(self) -> None:

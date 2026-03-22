@@ -164,7 +164,10 @@ class CollectScreen(ModalScreen[str | dict[str, str]]):
     def _validate(self, value: str) -> bool:
         """Validate input against the validation pattern."""
         if self._validation_pattern:
-            return bool(re.match(self._validation_pattern, value))
+            try:
+                return bool(re.match(self._validation_pattern, value))
+            except re.error:
+                return False
         return True
 
     @on(Button.Pressed, "#submit")

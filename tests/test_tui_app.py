@@ -51,7 +51,7 @@ class TestHITLApp:
         app = _TestApp(hitl_queue=queue)
         async with app.run_test() as _:
             assert app.query_one("#output-log", RichLog) is not None
-            assert app.query_one("#queue-status", Label) is not None
+            assert app.query_one("#status-bar", Label) is not None
 
     @pytest.mark.asyncio
     async def test_stream_output(self) -> None:
@@ -76,7 +76,7 @@ class TestHITLApp:
         app = _TestApp(hitl_queue=queue)
         async with app.run_test() as pilot:
             app.update_queue_status()
-            label = app.query_one("#queue-status", Label)
+            label = app.query_one("#status-bar", Label)
             await pilot.pause()
             assert label is not None
 
