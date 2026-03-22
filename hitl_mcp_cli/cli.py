@@ -92,17 +92,48 @@ def main() -> None:
         for _logger_name in ("mcp.server.streamable_http", "mcp.server.lowlevel.server"):
             logging.getLogger(_logger_name).addFilter(_SuppressClosedResource())
 
-        # Monkey-patch: fix mcp-sdk 1.21.0 bug #823 — ExceptionGroup from
-        # ClosedResourceError/BrokenResourceError kills stateless HTTP sessions.
-        _orig_handle = StreamableHTTPSessionManager._handle_stateless_request
+        # Fix mcp-sdk 1.21.0 bug #823: ClosedResourceError propagates through
+        # self._task_group (not through _handle_stateless_request), so except*
+        # must be INSIDE run_stateless_server, not wrapping the outer call.
+        def _patch_session_manager() -> None:
+            from mcp.server.streamable_http import StreamableHTTPServerTransport
 
-        async def _patched_handle_stateless(self, scope, receive, send):  # type: ignore[no-untyped-def]
-            try:
-                await _orig_handle(self, scope, receive, send)
-            except* (anyio.ClosedResourceError, anyio.BrokenResourceError):
-                logger.debug("Client disconnected mid-request — stateless session ended cleanly")
+            async def _fixed_handle_stateless(  # type: ignore[no-untyped-def]
+                self, scope, receive, send
+            ) -> None:
+                http_transport = StreamableHTTPServerTransport(
+                    mcp_session_id=None,
+                    is_json_response_enabled=self.json_response,
+                    event_store=None,
+                    security_settings=self.security_settings,
+                )
 
-        StreamableHTTPSessionManager._handle_stateless_request = _patched_handle_stateless  # type: ignore[method-assign]
+                async def run_stateless_server(  # type: ignore[no-untyped-def]
+                    *, task_status=anyio.TASK_STATUS_IGNORED
+                ) -> None:
+                    async with http_transport.connect() as streams:
+                        read_stream, write_stream = streams
+                        task_status.started()
+                        try:
+                            await self.app.run(
+                                read_stream,
+                                write_stream,
+                                self.app.create_initialization_options(),
+                                stateless=True,
+                            )
+                        except* (anyio.ClosedResourceError, anyio.BrokenResourceError):
+                            logger.debug("Client disconnected — stateless session ended cleanly")
+                        except* Exception:
+                            logger.exception("Stateless session crashed")
+
+                assert self._task_group is not None
+                await self._task_group.start(run_stateless_server)
+                await http_transport.handle_request(scope, receive, send)
+                await http_transport.terminate()
+
+            StreamableHTTPSessionManager._handle_stateless_request = _fixed_handle_stateless  # type: ignore[method-assign]
+
+        _patch_session_manager()
 
         mcp.run(
             transport="streamable-http",
