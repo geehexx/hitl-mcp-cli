@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - Plugin framework references from README and roadmap
 
+### Fixed
+- Enable `stateless_http=True` for streamable-http transport (fixes ClientDisconnect errors with Kiro CLI and other stateless MCP clients)
+
 ## [Unreleased]
 
 ### Added

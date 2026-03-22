@@ -137,6 +137,9 @@ Add to your MCP client configuration (e.g., Claude Desktop, Cline):
 
 **⚠️ Important**: Set `"timeout": 0` for infinite timeout. Human input is unpredictable - users may take seconds or minutes to respond. The default 60-second MCP timeout will cause tool calls to fail if users don't respond quickly enough.
 
+> **Note**: The server runs in stateless HTTP mode, which is required for MCP clients
+> that make independent HTTP requests (including Kiro CLI and most MCP clients).
+
 **That's it!** Your AI agent can now request human input.
 
 ---

@@ -76,6 +76,7 @@ def main() -> None:
             show_banner=False,
             log_level=uvicorn_log_level,
             uvicorn_config=uvicorn_config if uvicorn_config else None,
+            stateless_http=True,
         )
     except KeyboardInterrupt:
         print("\n\n👋 Server stopped by user")

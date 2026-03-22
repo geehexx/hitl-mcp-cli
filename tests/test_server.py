@@ -206,3 +206,28 @@ async def test_hitl_choose_multiple(mcp_client: Client) -> None:
         assert result is not None
         assert result.data == ["Option A", "Option C"]
         mock_checkbox.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_stateless_http_transport() -> None:
+    """Regression: server must use stateless_http=True for independent HTTP requests.
+
+    Without stateless_http=True, MCP clients that make independent POST requests
+    (like Kiro CLI) get ClientDisconnect errors because FastMCP expects persistent
+    connection state.
+    """
+    from unittest.mock import MagicMock
+
+    with patch.object(mcp, "run", wraps=MagicMock()) as mock_run:
+        from hitl_mcp_cli.cli import main
+
+        with patch("argparse.ArgumentParser.parse_args") as mock_args:
+            mock_args.return_value = MagicMock(host="127.0.0.1", port=5555, no_banner=True)
+            main()
+
+        mock_run.assert_called_once()
+        call_kwargs = mock_run.call_args[1]
+        assert (
+            call_kwargs.get("stateless_http") is True
+        ), "mcp.run() must pass stateless_http=True for stateless HTTP clients"
+        assert call_kwargs.get("transport") == "streamable-http"
