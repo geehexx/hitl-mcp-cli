@@ -17,14 +17,14 @@ async def mcp_client() -> Client:
 
 @pytest.mark.asyncio
 async def test_hitl_collect_keyboard_interrupt(mcp_client: Client) -> None:
-    """Test text input handles Ctrl+C gracefully."""
+    """Test text input handles Ctrl+C gracefully by returning cancel action."""
     with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock:
         mock.side_effect = KeyboardInterrupt()
 
-        with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("hitl_collect", {"message": "Test:"})
+        result = await mcp_client.call_tool("hitl_collect", {"message": "Test:"})
 
-        assert "User cancelled" in str(exc_info.value)
+        assert result is not None
+        assert result.data == {"action": "cancel"}
 
 
 @pytest.mark.asyncio
@@ -41,14 +41,14 @@ async def test_hitl_collect_generic_error(mcp_client: Client) -> None:
 
 @pytest.mark.asyncio
 async def test_hitl_choose_keyboard_interrupt(mcp_client: Client) -> None:
-    """Test selection handles Ctrl+C gracefully."""
+    """Test selection handles Ctrl+C gracefully by returning cancel action."""
     with patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock:
         mock.side_effect = KeyboardInterrupt()
 
-        with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("hitl_choose", {"message": "Choose:", "choices": ["A", "B"]})
+        result = await mcp_client.call_tool("hitl_choose", {"message": "Choose:", "choices": ["A", "B"]})
 
-        assert "User cancelled" in str(exc_info.value)
+        assert result is not None
+        assert result.data == {"action": "cancel"}
 
 
 @pytest.mark.asyncio
@@ -89,14 +89,14 @@ async def test_hitl_confirm_generic_error(mcp_client: Client) -> None:
 
 @pytest.mark.asyncio
 async def test_hitl_collect_path_keyboard_interrupt(mcp_client: Client) -> None:
-    """Test path input handles Ctrl+C gracefully."""
+    """Test path input handles Ctrl+C gracefully by returning cancel action."""
     with patch("hitl_mcp_cli.server.prompt_path", new_callable=AsyncMock) as mock:
         mock.side_effect = KeyboardInterrupt()
 
-        with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("hitl_collect", {"message": "Select path:", "input_type": "path"})
+        result = await mcp_client.call_tool("hitl_collect", {"message": "Select path:", "input_type": "path"})
 
-        assert "User cancelled" in str(exc_info.value)
+        assert result is not None
+        assert result.data == {"action": "cancel"}
 
 
 @pytest.mark.asyncio
@@ -125,14 +125,14 @@ async def test_hitl_notify_error(mcp_client: Client) -> None:
 
 @pytest.mark.asyncio
 async def test_hitl_choose_multiple_keyboard_interrupt(mcp_client: Client) -> None:
-    """Test multiple selection handles Ctrl+C gracefully."""
+    """Test multiple selection handles Ctrl+C gracefully by returning cancel action."""
     with patch("hitl_mcp_cli.server.prompt_checkbox", new_callable=AsyncMock) as mock:
         mock.side_effect = KeyboardInterrupt()
 
-        with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool(
-                "hitl_choose",
-                {"message": "Select:", "choices": ["A", "B"], "multiple": True},
-            )
+        result = await mcp_client.call_tool(
+            "hitl_choose",
+            {"message": "Select:", "choices": ["A", "B"], "multiple": True},
+        )
 
-        assert "User cancelled" in str(exc_info.value)
+        assert result is not None
+        assert result.data == {"action": "cancel"}

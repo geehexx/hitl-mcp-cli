@@ -50,7 +50,11 @@ def sync_to_async(func: Callable[..., Any]) -> Callable[..., Any]:
 
 @sync_to_async
 def prompt_text(
-    prompt: str, default: str | None = None, multiline: bool = False, validate_pattern: str | None = None
+    prompt: str,
+    default: str | None = None,
+    multiline: bool = False,
+    validate_pattern: str | None = None,
+    invalid_message: str | None = None,
 ) -> str:
     """Prompt for text input."""
     global _needs_separator
@@ -91,6 +95,7 @@ def prompt_text(
                 default=default or "",
                 multiline=True,
                 validate=validator,
+                invalid_message=invalid_message or "Invalid input",
                 keybindings={"answer": [{"key": ["escape", "enter"]}]},
                 raise_keyboard_interrupt=True,
             ).execute()
@@ -103,6 +108,7 @@ def prompt_text(
             message=formatted_prompt,
             default=default or "",
             validate=validator,
+            invalid_message=invalid_message or "Invalid input",
             raise_keyboard_interrupt=True,
         ).execute()
 

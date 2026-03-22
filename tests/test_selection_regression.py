@@ -199,19 +199,17 @@ async def test_prompt_select_keyboard_interrupt() -> None:
 
 @pytest.mark.asyncio
 async def test_hitl_choose_keyboard_interrupt(mcp_client: Client) -> None:
-    """Test hitl_choose converts KeyboardInterrupt to user-friendly error."""
-    from fastmcp.exceptions import ToolError
-
+    """Test hitl_choose returns cancel action on KeyboardInterrupt."""
     with patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock:
         mock.side_effect = KeyboardInterrupt()
 
-        with pytest.raises(ToolError) as exc_info:
-            await mcp_client.call_tool(
-                "hitl_choose",
-                {"message": "Choose:", "choices": ["A", "B"], "multiple": False},
-            )
+        result = await mcp_client.call_tool(
+            "hitl_choose",
+            {"message": "Choose:", "choices": ["A", "B"], "multiple": False},
+        )
 
-        assert "User cancelled" in str(exc_info.value)
+        assert result is not None
+        assert result.data == {"action": "cancel"}
 
 
 @pytest.mark.asyncio

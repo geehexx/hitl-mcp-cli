@@ -115,7 +115,7 @@ async def test_hitl_collect_tool(mcp_client: Client) -> None:
 
         assert result is not None
         assert result.data == "Test User Input"
-        mock_prompt.assert_called_once_with("Enter your name:", "User", False, None)
+        mock_prompt.assert_called_once_with("Enter your name:", "User", False, None, None)
 
 
 @pytest.mark.asyncio

@@ -77,7 +77,7 @@ class TestToolExecution:
             assert result is not None
             assert result.data == "User Response"
             assert not result.is_error
-            mock_prompt.assert_called_once_with("Enter text:", "default", False, None)
+            mock_prompt.assert_called_once_with("Enter text:", "default", False, None, None)
 
     @pytest.mark.asyncio
     async def test_hitl_collect_multiline(self, mcp_client: Client) -> None:
@@ -93,7 +93,7 @@ class TestToolExecution:
             assert result is not None
             assert result.data == "line1\nline2"
             assert not result.is_error
-            mock_prompt.assert_called_once_with("Enter text:", None, True, None)
+            mock_prompt.assert_called_once_with("Enter text:", None, True, None, None)
 
     @pytest.mark.asyncio
     async def test_hitl_collect_path(self, mcp_client: Client) -> None:
@@ -380,18 +380,15 @@ class TestErrorHandling:
 
     @pytest.mark.asyncio
     async def test_keyboard_interrupt_handling(self, mcp_client: Client) -> None:
-        """Test KeyboardInterrupt is converted to proper error."""
+        """Test KeyboardInterrupt returns cancel action."""
         with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock_prompt:
             mock_prompt.side_effect = KeyboardInterrupt()
 
-            result = await mcp_client.call_tool(
-                "hitl_collect", {"message": "Enter text:"}, raise_on_error=False
-            )
+            result = await mcp_client.call_tool("hitl_collect", {"message": "Enter text:"})
 
             assert result is not None
-            assert result.is_error
-            error_text = str(result.content[0].text if result.content else "")
-            assert "cancelled" in error_text.lower() or "ctrl+c" in error_text.lower()
+            assert not result.is_error
+            assert result.data == {"action": "cancel"}
 
     @pytest.mark.asyncio
     async def test_generic_exception_handling(self, mcp_client: Client) -> None:
@@ -438,7 +435,7 @@ class TestParameterHandling:
 
             assert result is not None
             assert not result.is_error
-            mock_prompt.assert_called_once_with("Enter text:", None, False, None)
+            mock_prompt.assert_called_once_with("Enter text:", None, False, None, None)
 
     @pytest.mark.asyncio
     async def test_all_parameters_provided(self, mcp_client: Client) -> None:
@@ -458,7 +455,7 @@ class TestParameterHandling:
 
             assert result is not None
             assert not result.is_error
-            mock_prompt.assert_called_once_with("Enter text:", "default value", True, r"^\w+$")
+            mock_prompt.assert_called_once_with("Enter text:", "default value", True, r"^\w+$", None)
 
     @pytest.mark.asyncio
     async def test_notification_level_values(self, mcp_client: Client) -> None:

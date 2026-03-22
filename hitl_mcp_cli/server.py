@@ -24,7 +24,7 @@ async def hitl_collect(
     default: str | None = None,
     validation_pattern: str | None = None,
     validation_message: str | None = None,
-) -> str:
+) -> str | dict[str, str]:
     """Collect a single input value from the user. Use for text, file paths, or multiline content. Blocks until the user responds.
 
     Args:
@@ -41,12 +41,12 @@ async def hitl_collect(
         if input_type == "path":
             result: str = await prompt_path(message, "any", False, default)
         elif input_type == "multiline":
-            result = await prompt_text(message, default, True, validation_pattern)
+            result = await prompt_text(message, default, True, validation_pattern, validation_message)
         else:
-            result = await prompt_text(message, default, False, validation_pattern)
+            result = await prompt_text(message, default, False, validation_pattern, validation_message)
         return result
     except KeyboardInterrupt:
-        raise Exception("User cancelled input (Ctrl+C)") from None
+        return {"action": "cancel"}
     except Exception as e:
         raise Exception(f"Input collection failed: {str(e)}") from e
 
@@ -59,7 +59,7 @@ async def hitl_choose(
     multiple: bool = False,
     default: str | None = None,
     fuzzy_search: bool | None = None,
-) -> str | list[str]:
+) -> str | list[str] | dict[str, str]:
     """Present a list of options for the user to select from. Supports single or multiple selection, fuzzy search for long lists, and rich option descriptions.
 
     Args:
@@ -92,14 +92,16 @@ async def hitl_choose(
 
     try:
         if multiple:
-            result: list[str] = await prompt_checkbox(message, choices)
-            return result
+            raw: list[str] = await prompt_checkbox(message, choices)
+            if display_to_value:
+                return [display_to_value.get(r, r) for r in raw]
+            return raw
         result_str: str = await prompt_select(message, choices, default)
         if display_to_value is not None:
             return display_to_value.get(result_str, result_str)
         return result_str
     except KeyboardInterrupt:
-        raise Exception("User cancelled selection (Ctrl+C)") from None
+        return {"action": "cancel"}
     except Exception as e:
         raise Exception(f"Selection failed: {str(e)}") from e
 
@@ -201,7 +203,7 @@ async def hitl_approve_workflow(
         approved = choice == effective_options[0]
         return {"approved": approved, "choice": choice, "timed_out": False}
     except KeyboardInterrupt:
-        raise Exception("User cancelled approval (Ctrl+C)") from None
+        return {"approved": False, "choice": "", "timed_out": False, "action": "cancel"}
     except Exception as e:
         raise Exception(f"Approval workflow failed: {str(e)}") from e
 
