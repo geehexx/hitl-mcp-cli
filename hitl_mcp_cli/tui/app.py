@@ -59,6 +59,10 @@ class HITLApp(App[None]):
 
     def stream_output(self, agent: str, message: str, level: str = "info") -> None:
         """Append to RichLog. Call via call_from_thread from server thread."""
+        from rich.markdown import Markdown as RichMarkdown
+
+        from .screens import _expand_escapes, _has_markdown
+
         level_styles = {
             "success": "[green]",
             "error": "[red]",
@@ -67,7 +71,12 @@ class HITLApp(App[None]):
         }
         prefix = level_styles.get(level, "[blue]")
         log = self.query_one("#output-log", RichLog)
-        log.write(f"{prefix}{agent}:[/] {message}")
+        message = _expand_escapes(message)
+        log.write(f"{prefix}{agent}:[/]")
+        if _has_markdown(message):
+            log.write(RichMarkdown(message))
+        else:
+            log.write(message)
 
     def update_queue_status(self) -> None:
         """Refresh the queue status label."""

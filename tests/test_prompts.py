@@ -334,3 +334,51 @@ def test_display_notification_with_notes() -> None:
         display_notification("Info", "Message", "info", notes="Extra context")
         # 3 prints: notes dim line + panel + spacing
         assert mock_console.print.call_count == 3
+
+
+# --- Newline expansion and Markdown rendering ---
+
+
+def test_expand_escapes_converts_literal_backslash_n() -> None:
+    """Test that literal \\n sequences are expanded to real newlines."""
+    from hitl_mcp_cli.ui.prompts import _expand_escapes
+
+    assert _expand_escapes("line1\\nline2") == "line1\nline2"
+    assert _expand_escapes("no escapes") == "no escapes"
+    assert _expand_escapes("a\\nb\\nc") == "a\nb\nc"
+    # Already-real newlines are preserved
+    assert _expand_escapes("a\nb") == "a\nb"
+
+
+def test_display_notification_expands_newlines() -> None:
+    """Test that display_notification expands \\n in message and title."""
+    with patch("hitl_mcp_cli.ui.prompts.console") as mock_console:
+        display_notification("Title\\nLine2", "Msg\\nLine2", "info")
+        panel_call = mock_console.print.call_args_list[0]
+        panel = panel_call[0][0]
+        # Panel title should contain expanded newline
+        assert "\\n" not in str(panel.title)
+
+
+def test_display_notification_renders_markdown() -> None:
+    """Test that markdown content is rendered via rich.markdown.Markdown."""
+    with patch("hitl_mcp_cli.ui.prompts.console") as mock_console:
+        md_message = "# Header\n\n- item1\n- item2\n\n**bold text**"
+        display_notification("Test", md_message, "info")
+        panel_call = mock_console.print.call_args_list[0]
+        panel = panel_call[0][0]
+        # Panel body should be a Markdown renderable, not escaped string
+        from rich.markdown import Markdown
+
+        assert isinstance(panel.renderable, Markdown)
+
+
+def test_display_notification_plain_text_not_markdown() -> None:
+    """Test that plain text is NOT rendered as Markdown."""
+    with patch("hitl_mcp_cli.ui.prompts.console") as mock_console:
+        display_notification("Test", "Just plain text", "info")
+        panel_call = mock_console.print.call_args_list[0]
+        panel = panel_call[0][0]
+        from rich.markdown import Markdown
+
+        assert not isinstance(panel.renderable, Markdown)

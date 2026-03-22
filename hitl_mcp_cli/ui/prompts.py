@@ -49,9 +49,15 @@ def sync_to_async(func: Callable[..., Any]) -> Callable[..., Any]:
     return wrapper
 
 
+def _expand_escapes(text: str) -> str:
+    """Expand literal backslash-n sequences to real newlines."""
+    return text.replace("\\n", "\n")
+
+
 def _render_notes(notes: str | None) -> None:
     """Display optional notes line in dim style."""
     if notes:
+        notes = _expand_escapes(notes)
         console.print(f"[dim]{escape(notes)}[/dim]")
 
 
@@ -298,12 +304,21 @@ def display_notification(
     color = color_map.get(notification_type, "blue")
     icon = ICONS.get(notification_type, ICONS["info"])
 
+    title = _expand_escapes(title)
+    message = _expand_escapes(message)
+
     # Create rich text for title with icon
     title_text = Text()
     title_text.append(icon, style=f"bold {color}")
     title_text.append(escape(title), style=f"bold {color}")
 
-    panel = Panel(escape(message), title=title_text, border_style=color, padding=(1, 2))
+    body: Markdown | Text
+    if _has_markdown(message):
+        body = Markdown(message)
+    else:
+        body = Text(escape(message))
+
+    panel = Panel(body, title=title_text, border_style=color, padding=(1, 2))
     _render_notes(notes)
     console.print(panel)
     console.print()  # Add spacing after notification
@@ -312,6 +327,7 @@ def display_notification(
 
 def _render_inline_prompt(prompt: str, icon: str) -> None:
     """Render a non-markdown prompt with Rich (handles emoji width correctly)."""
+    prompt = _expand_escapes(prompt)
     text = Text()
     text.append(f"{icon} ", style="bold cyan")
     text.append(prompt, style="bold cyan")

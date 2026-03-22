@@ -9,9 +9,27 @@ from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, Select, Static, TextArea
+from textual.widgets import Button, Input, Label, Markdown, Select, Static, TextArea
 
 from .queue import HITLRequest
+
+
+def _expand_escapes(text: str) -> str:
+    """Expand literal backslash-n sequences to real newlines."""
+    return text.replace("\\n", "\n")
+
+
+def _has_markdown(text: str) -> bool:
+    """Detect if text contains markdown formatting."""
+    if len(text) > 10000:
+        return False
+    return any(
+        [
+            "```" in text,
+            text.lstrip().startswith("# ") or "\n# " in text,
+            ("**" in text and ("\n- " in text or "\n* " in text or "\n1. " in text)),
+        ]
+    )
 
 
 class ConfirmScreen(ModalScreen[dict[str, Any]]):
@@ -268,9 +286,11 @@ class NotifyScreen(ModalScreen[bool]):
     def __init__(self, request: HITLRequest) -> None:
         """Initialize notification screen from HITL request."""
         super().__init__()
-        self._message: str = request.params.get("message", "")
+        self._message: str = _expand_escapes(request.params.get("message", ""))
         self._level: str = request.params.get("level", "info")
         self._title_text: str | None = request.params.get("title")
+        if self._title_text:
+            self._title_text = _expand_escapes(self._title_text)
 
     def compose(self) -> ComposeResult:
         """Compose the notification dialog UI."""
@@ -278,7 +298,10 @@ class NotifyScreen(ModalScreen[bool]):
         with Vertical(id="notify-dialog", classes=level_class):
             if self._title_text:
                 yield Label(f"[bold]{self._title_text}[/bold]")
-            yield Static(self._message)
+            if _has_markdown(self._message):
+                yield Markdown(self._message)
+            else:
+                yield Static(self._message)
             yield Button("OK", variant="primary", id="dismiss")
 
     def on_mount(self) -> None:

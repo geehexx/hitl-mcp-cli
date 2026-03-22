@@ -49,7 +49,7 @@ class TestHITLApp:
     async def test_app_mounts(self) -> None:
         queue = HITLQueue()
         app = _TestApp(hitl_queue=queue)
-        async with app.run_test() as pilot:
+        async with app.run_test() as _:
             assert app.query_one("#output-log", RichLog) is not None
             assert app.query_one("#queue-status", Label) is not None
 
@@ -57,7 +57,7 @@ class TestHITLApp:
     async def test_stream_output(self) -> None:
         queue = HITLQueue()
         app = _TestApp(hitl_queue=queue)
-        async with app.run_test() as pilot:
+        async with app.run_test() as _:
             app.stream_output("test-agent", "hello world", "info")
             log = app.query_one("#output-log", RichLog)
             assert log is not None
@@ -66,7 +66,7 @@ class TestHITLApp:
     async def test_stream_output_levels(self) -> None:
         queue = HITLQueue()
         app = _TestApp(hitl_queue=queue)
-        async with app.run_test() as pilot:
+        async with app.run_test() as _:
             for level in ("success", "error", "warning", "info"):
                 app.stream_output("agent", f"msg-{level}", level)
 
@@ -84,7 +84,7 @@ class TestHITLApp:
     async def test_no_server_thread_without_mcp_app(self) -> None:
         queue = HITLQueue()
         app = _TestApp(hitl_queue=queue)
-        async with app.run_test() as pilot:
+        async with app.run_test() as _:
             assert app._server_thread is None
 
 
@@ -493,3 +493,78 @@ class TestChooseScreenInteraction:
             await pilot.pause()
 
         assert results == [[]]
+
+
+# --- Newline expansion and Markdown rendering (TUI) ---
+
+
+class TestNotifyScreenNewlineAndMarkdown:
+    @pytest.mark.asyncio
+    async def test_notify_expands_literal_newlines(self) -> None:
+        """Test that literal \\n in message is expanded to real newlines."""
+        app = _TestApp(hitl_queue=HITLQueue())
+
+        async with app.run_test() as pilot:
+            req = _make_request(
+                "notify",
+                {"message": "line1\\nline2", "level": "info"},
+            )
+            screen = NotifyScreen(req)
+            app.push_screen(screen)
+            await pilot.pause()
+            # The internal message should have real newlines
+            assert screen._message == "line1\nline2"
+
+    @pytest.mark.asyncio
+    async def test_notify_renders_markdown_widget(self) -> None:
+        """Test that markdown content uses Markdown widget instead of Static."""
+        from textual.widgets import Markdown as TextualMarkdown
+
+        app = _TestApp(hitl_queue=HITLQueue())
+
+        async with app.run_test() as pilot:
+            req = _make_request(
+                "notify",
+                {
+                    "message": "# Header\n\n- item1\n- item2\n\n**bold text**",
+                    "level": "info",
+                },
+            )
+            screen = NotifyScreen(req)
+            app.push_screen(screen)
+            await pilot.pause()
+            md_widgets = screen.query(TextualMarkdown)
+            assert len(md_widgets) > 0
+
+    @pytest.mark.asyncio
+    async def test_notify_plain_text_uses_static(self) -> None:
+        """Test that plain text uses Static widget, not Markdown."""
+        from textual.widgets import Markdown as TextualMarkdown
+
+        app = _TestApp(hitl_queue=HITLQueue())
+
+        async with app.run_test() as pilot:
+            req = _make_request(
+                "notify",
+                {"message": "Just plain text", "level": "info"},
+            )
+            screen = NotifyScreen(req)
+            app.push_screen(screen)
+            await pilot.pause()
+            md_widgets = screen.query(TextualMarkdown)
+            assert len(md_widgets) == 0
+
+    @pytest.mark.asyncio
+    async def test_notify_title_expands_newlines(self) -> None:
+        """Test that literal \\n in title is expanded."""
+        app = _TestApp(hitl_queue=HITLQueue())
+
+        async with app.run_test() as pilot:
+            req = _make_request(
+                "notify",
+                {"message": "msg", "title": "Title\\nSubtitle", "level": "info"},
+            )
+            screen = NotifyScreen(req)
+            app.push_screen(screen)
+            await pilot.pause()
+            assert screen._title_text == "Title\nSubtitle"
