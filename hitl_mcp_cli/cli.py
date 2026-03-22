@@ -16,6 +16,22 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+class _SuppressClosedResource(logging.Filter):
+    """Suppress expected ClosedResourceError noise from FastMCP stateless HTTP cleanup."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        return not any(
+            x in msg
+            for x in (
+                "ClosedResourceError",
+                "ClientDisconnect",
+                "Error in message router",
+                "Received exception from stream",
+            )
+        )
+
+
 def main() -> None:
     """Run the interactive MCP server."""
     # Get defaults from environment variables
@@ -68,6 +84,10 @@ def main() -> None:
                     },
                 },
             }
+
+        # Suppress expected lifecycle noise from FastMCP stateless HTTP cleanup
+        for _logger_name in ("mcp.server.streamable_http", "mcp.server.lowlevel.server"):
+            logging.getLogger(_logger_name).addFilter(_SuppressClosedResource())
 
         mcp.run(
             transport="streamable-http",
