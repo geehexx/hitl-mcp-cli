@@ -59,7 +59,7 @@ HITL MCP CLI provides a **standardized, elegant interface** for AI agents to req
 
 ## ✨ Features
 
-- **🎯 5 Interactive Tools**: Text input, selection, confirmation, path input, and notifications
+- **🎯 5 Interactive Tools**: Collect input, choose from options, confirm actions, notifications, and workflow approval
 - **🎨 Beautiful Terminal UI**: Icons, gradients, and smooth animations
 - **🚀 Instant Setup**: Works with `uvx` — no installation required
 - **🔌 MCP Standard**: Seamless integration with any MCP-compatible AI agent
@@ -143,173 +143,193 @@ Add to your MCP client configuration (e.g., Claude Desktop, Cline):
 
 ## 🛠️ Available Tools
 
-### 1. `request_text_input` — Collect Text Input
+### 1. `hitl_collect` — Collect Input
 
-Get text from the user with optional validation.
+Collect a single input value from the user. Use for text, file paths, or multiline content.
 
 **When to use**:
 - Collecting names, descriptions, or free-form input
-- Getting configuration values
-- Requesting API keys or credentials (with validation)
+- Getting file/directory paths with completion
+- Requesting multi-line content (code snippets, descriptions)
 
 **Example**:
 ```python
-name = await request_text_input(
-    prompt="What should we name this project?",
+name = await hitl_collect(
+    message="What should we name this project?",
     default="my-project",
-    validate_pattern=r"^[a-z0-9-]+$"  # Only lowercase, numbers, hyphens
+    validation_pattern=r"^[a-z0-9-]+$"
+)
+
+# Path input
+config = await hitl_collect(
+    message="Select configuration file:",
+    input_type="path"
+)
+
+# Multiline input
+description = await hitl_collect(
+    message="Enter project description:",
+    input_type="multiline"
 )
 ```
 
 **Parameters**:
-- `prompt` (str): Question to display
+- `message` (str): Question to display
+- `input_type` (Literal["text", "path", "multiline"]): Input mode (default: "text")
 - `default` (str, optional): Pre-filled value
-- `multiline` (bool): Enable multi-line input for longer text
-- `validate_pattern` (str, optional): Regex pattern for validation
+- `validation_pattern` (str, optional): Regex pattern for validation
+- `validation_message` (str, optional): Custom validation error message
 
 ---
 
-### 2. `request_selection` — Present Choices
+### 2. `hitl_choose` — Present Choices
 
-Let the user choose from predefined options (single or multiple).
+Present a list of options for the user to select from. Supports single or multiple selection, fuzzy search for long lists, and rich option descriptions.
 
 **When to use**:
 - Choosing between implementation approaches
 - Selecting deployment environments
 - Picking features to enable
-- Configuring options from a known set
 
 **Example**:
 ```python
-# Single choice
-env = await request_selection(
-    prompt="Which environment should I deploy to?",
+# Simple choices
+env = await hitl_choose(
+    message="Which environment should I deploy to?",
     choices=["Development", "Staging", "Production"],
     default="Staging"
 )
 
-# Multiple choices
-features = await request_selection(
-    prompt="Which features should I enable?",
+# Rich options with descriptions
+approach = await hitl_choose(
+    message="Select implementation approach:",
+    options=[
+        {"value": "fast", "label": "Fast", "description": "Quick but uses more memory"},
+        {"value": "safe", "label": "Safe", "description": "Slower but reliable"},
+    ]
+)
+
+# Multiple selections
+features = await hitl_choose(
+    message="Which features should I enable?",
     choices=["Authentication", "Caching", "Logging", "Monitoring"],
-    allow_multiple=True
+    multiple=True
 )
 ```
 
 **Parameters**:
-- `prompt` (str): Question to display
-- `choices` (list[str]): Available options
+- `message` (str): Question to display
+- `choices` (list[str], optional): Simple option strings
+- `options` (list[dict], optional): Rich options with value/label/description
+- `multiple` (bool): Enable checkbox mode (default: False)
 - `default` (str, optional): Pre-selected option
-- `allow_multiple` (bool): Enable checkbox mode for multiple selections
+- `fuzzy_search` (bool, optional): Force fuzzy search on/off (auto for >15 items)
 
 ---
 
-### 3. `request_confirmation` — Get Yes/No Approval
+### 3. `hitl_confirm` — Get Confirmation
 
-Request explicit approval before proceeding.
+Ask the user to confirm or reject an action. Use severity='high' for destructive operations.
 
 **When to use**:
 - Before destructive operations (delete, overwrite)
 - Before expensive operations (API calls, deployments)
 - Confirming assumptions or interpretations
-- Validating generated code or configurations
 
 **Example**:
 ```python
-confirmed = await request_confirmation(
-    prompt="I will delete 50 unused dependencies. Proceed?",
-    default=False  # Default to safe option
+# Standard confirmation
+confirmed = await hitl_confirm(
+    message="I will delete 50 unused dependencies. Proceed?",
+    default=False
 )
 
-if confirmed:
-    # Proceed with operation
-    await delete_dependencies()
-    await notify_completion(
-        title="Cleanup Complete",
-        message="Removed 50 unused dependencies",
-        notification_type="success"
-    )
-```
-
-**Parameters**:
-- `prompt` (str): Yes/no question
-- `default` (bool): Default answer (use `False` for destructive operations)
-
----
-
-### 4. `request_path_input` — Get File/Directory Paths
-
-Collect file or directory paths with validation.
-
-**When to use**:
-- Selecting configuration files
-- Choosing output directories
-- Locating input data
-- Specifying log file locations
-
-**Example**:
-```python
-config_path = await request_path_input(
-    prompt="Select the configuration file:",
-    path_type="file",
-    must_exist=True,
-    default="./config.yaml"
+# High severity — requires typed "yes"
+confirmed = await hitl_confirm(
+    message="Delete production database?",
+    severity="high"
 )
 
-output_dir = await request_path_input(
-    prompt="Where should I save the output?",
-    path_type="directory",
-    must_exist=False,  # Will be created if needed
-    default="./output"
+# Low severity — defaults to yes
+confirmed = await hitl_confirm(
+    message="Continue with default settings?",
+    severity="low"
 )
 ```
 
 **Parameters**:
-- `prompt` (str): Question to display
-- `path_type` (Literal["file", "directory", "any"]): Expected path type
-- `must_exist` (bool): Validate that path exists
-- `default` (str, optional): Pre-filled path
+- `message` (str): Yes/no question
+- `default` (bool): Default answer (default: False)
+- `severity` (Literal["low", "medium", "high"]): Confirmation intensity (default: "medium")
 
 ---
 
-### 5. `notify_completion` — Display Status Notifications
+### 4. `hitl_notify` — Display Notifications
 
-Show styled notifications for important events.
+Display a styled notification to the user. Non-blocking — does not wait for input.
 
 **When to use**:
 - Confirming successful operations
 - Reporting errors or warnings
 - Providing progress updates
-- Highlighting important information
 
 **Example**:
 ```python
-# Success notification
-await notify_completion(
-    title="Deployment Complete",
+await hitl_notify(
     message="Successfully deployed v2.1.0 to production\n\nURL: https://app.example.com",
-    notification_type="success"
+    level="success",
+    title="Deployment Complete"
 )
 
-# Warning notification
-await notify_completion(
-    title="Deprecation Warning",
+await hitl_notify(
     message="The old API will be removed in v3.0",
-    notification_type="warning"
-)
-
-# Error notification
-await notify_completion(
-    title="Build Failed",
-    message="TypeScript compilation errors found\n\nRun 'npm run type-check' for details",
-    notification_type="error"
+    level="warning",
+    title="Deprecation Warning"
 )
 ```
 
 **Parameters**:
-- `title` (str): Notification title
 - `message` (str): Detailed message (supports multi-line)
-- `notification_type` (Literal["success", "info", "warning", "error"]): Visual style
+- `level` (Literal["success", "info", "warning", "error"]): Visual style (default: "info")
+- `title` (str, optional): Notification title
+
+---
+
+### 5. `hitl_approve_workflow` — Workflow Approval
+
+Request explicit human approval before proceeding with a significant workflow step. Blocks until approved, rejected, or timed out.
+
+**When to use**:
+- Deploying to production
+- Deleting data or resources
+- Sending external communications
+- Any irreversible action
+
+**Example**:
+```python
+result = await hitl_approve_workflow(
+    message="Deploy v2.0 to production?",
+    context="This will affect 10,000 active users.\nDowntime: ~30 seconds.",
+    severity="high",
+    timeout_seconds=300
+)
+
+if result["approved"]:
+    await deploy_to_production()
+elif result["timed_out"]:
+    await hitl_notify(message="Approval timed out", level="warning")
+else:
+    await hitl_notify(message="Deployment cancelled", level="info")
+```
+
+**Parameters**:
+- `message` (str): What needs approval
+- `context` (str, optional): Additional details to display
+- `options` (list[str]): Choices (default: ["Approve", "Reject"])
+- `timeout_seconds` (int): Seconds to wait, 0 = infinite (default: 300)
+- `severity` (Literal["low", "medium", "high"]): Visual severity (default: "high")
+
+**Returns**: `{"approved": bool, "choice": str, "timed_out": bool}`
 
 ---
 
@@ -320,9 +340,8 @@ await notify_completion(
 When requirements are ambiguous, ask specific questions:
 
 ```python
-# Agent encounters ambiguous requirement
-approach = await request_selection(
-    prompt="I can implement this feature in two ways. Which do you prefer?",
+approach = await hitl_choose(
+    message="I can implement this feature in two ways. Which do you prefer?",
     choices=[
         "Option A: Fast implementation, higher memory usage",
         "Option B: Slower but more memory efficient",
@@ -330,14 +349,6 @@ approach = await request_selection(
     ],
     default="Option C: Balanced approach (recommended)"
 )
-
-# Proceed with chosen approach
-if "Option A" in approach:
-    await implement_fast_version()
-elif "Option B" in approach:
-    await implement_efficient_version()
-else:
-    await implement_balanced_version()
 ```
 
 ### Pattern 2: Approval Gate
@@ -345,25 +356,24 @@ else:
 Request approval before significant actions:
 
 ```python
-# Explain what will happen
 files_to_delete = find_unused_files()
-confirmed = await request_confirmation(
-    prompt=f"I found {len(files_to_delete)} unused files. Delete them?",
+confirmed = await hitl_confirm(
+    message=f"I found {len(files_to_delete)} unused files. Delete them?",
     default=False
 )
 
 if confirmed:
     delete_files(files_to_delete)
-    await notify_completion(
-        title="Cleanup Complete",
+    await hitl_notify(
         message=f"Deleted {len(files_to_delete)} unused files",
-        notification_type="success"
+        level="success",
+        title="Cleanup Complete"
     )
 else:
-    await notify_completion(
-        title="Cancelled",
+    await hitl_notify(
         message="No files were deleted",
-        notification_type="info"
+        level="info",
+        title="Cancelled"
     )
 ```
 
@@ -372,31 +382,26 @@ else:
 Collect structured data through multiple prompts:
 
 ```python
-# Gather project configuration
-project_name = await request_text_input(
-    prompt="Project name:",
-    validate_pattern=r"^[a-z0-9-]+$"
+project_name = await hitl_collect(
+    message="Project name:",
+    validation_pattern=r"^[a-z0-9-]+$"
 )
 
-language = await request_selection(
-    prompt="Programming language:",
+language = await hitl_choose(
+    message="Programming language:",
     choices=["Python", "TypeScript", "Go", "Rust"]
 )
 
-features = await request_selection(
-    prompt="Select features to include:",
+features = await hitl_choose(
+    message="Select features to include:",
     choices=["Testing", "Linting", "CI/CD", "Documentation"],
-    allow_multiple=True
+    multiple=True
 )
 
-output_dir = await request_path_input(
-    prompt="Output directory:",
-    path_type="directory",
-    must_exist=False
+output_dir = await hitl_collect(
+    message="Output directory:",
+    input_type="path"
 )
-
-# Generate project with collected information
-await generate_project(project_name, language, features, output_dir)
 ```
 
 ### Pattern 4: Progressive Disclosure
@@ -404,26 +409,24 @@ await generate_project(project_name, language, features, output_dir)
 Start with high-level choices, then drill down:
 
 ```python
-# High-level choice
-action = await request_selection(
-    prompt="What would you like to do?",
+action = await hitl_choose(
+    message="What would you like to do?",
     choices=["Deploy", "Rollback", "View Logs", "Run Tests"]
 )
 
 if action == "Deploy":
-    # Drill down for deployment
-    env = await request_selection(
-        prompt="Deploy to which environment?",
+    env = await hitl_choose(
+        message="Deploy to which environment?",
         choices=["Staging", "Production"]
     )
 
     if env == "Production":
-        # Extra confirmation for production
-        confirmed = await request_confirmation(
-            prompt="Deploy to PRODUCTION? This will affect live users.",
-            default=False
+        result = await hitl_approve_workflow(
+            message="Deploy to PRODUCTION?",
+            context="This will affect live users.",
+            severity="high"
         )
-        if confirmed:
+        if result["approved"]:
             await deploy_to_production()
 ```
 
@@ -508,16 +511,6 @@ HITL MCP CLI is designed to be accessible:
 - **✅ Terminal compatibility**: Works with screen readers through terminal emulators
 
 See [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) for detailed accessibility information, testing methodology, and recommendations for users with diverse needs.
-
-## 🔌 Plugin Framework
-
-HITL MCP CLI will gain plugin support through the **[MCP Plugin Server](https://github.com/geehexx/mcp-plugin-server)** framework. This will enable:
-
-- Extensible architecture with plugin-based capabilities
-- Community-contributed plugins for additional features
-- Wrapper mode to enhance HITL with new functionality
-
-See the [MCP Plugin Server repository](https://github.com/geehexx/mcp-plugin-server) for details on the plugin framework architecture and development.
 
 ---
 
@@ -624,7 +617,7 @@ When integrating HITL MCP tools, handle errors appropriately:
 
 ```python
 try:
-    result = await request_text_input(prompt="Enter value:")
+    result = await hitl_collect(message="Enter value:")
 except Exception as e:
     if "User cancelled" in str(e):
         # User pressed Ctrl+C - respect their decision

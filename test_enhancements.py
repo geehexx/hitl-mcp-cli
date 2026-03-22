@@ -2,7 +2,7 @@
 
 import asyncio
 
-from hitl_mcp_cli.server import notify_completion, request_confirmation, request_selection, request_text_input
+from hitl_mcp_cli.server import hitl_choose, hitl_collect, hitl_confirm, hitl_notify
 
 
 async def main() -> None:
@@ -13,15 +13,15 @@ async def main() -> None:
     print("TEST 1: Visual Separators")
     print("You should see a horizontal line before each prompt after the first one.\n")
 
-    await request_text_input(prompt="First prompt (no separator before this)", default="test1")
+    await hitl_collect(prompt="First prompt (no separator before this)", default="test1")
 
-    await notify_completion(
+    await hitl_notify(
         title="Notification Test",
         message="This should trigger a separator before next prompt",
         notification_type="info",
     )
 
-    await request_text_input(prompt="Second prompt (separator should appear above)", default="test2")
+    await hitl_collect(prompt="Second prompt (separator should appear above)", default="test2")
 
     # Test 2: Markdown rendering
     print("\nTEST 2: Markdown Rendering")
@@ -39,7 +39,7 @@ We have **three options** available:
 Which would you prefer?
 """
 
-    await request_selection(
+    await hitl_choose(
         prompt=markdown_prompt,
         choices=["Fast Deploy", "Safe Deploy", "Staged Deploy"],
         default="Safe Deploy",
@@ -49,7 +49,7 @@ Which would you prefer?
     print("\nTEST 3: Checkbox Visibility")
     print("All choices should be visible. Instruction text should appear.\n")
 
-    features = await request_selection(
+    features = await hitl_choose(
         prompt="Select features to enable:",
         choices=[
             "Feature A: Authentication",
@@ -76,7 +76,7 @@ This will **delete 50 files** including:
 This action **cannot be undone**.
 """
 
-    confirmed = await request_confirmation(prompt=markdown_confirm, default=False)
+    confirmed = await hitl_confirm(prompt=markdown_confirm, default=False)
     print(f"Confirmed: {confirmed}\n")
 
     # Test 5: Escape key handling
@@ -84,13 +84,13 @@ This action **cannot be undone**.
     print("Try pressing Ctrl+C to cancel the next prompt.\n")
 
     try:
-        await request_text_input(prompt="Press Ctrl+C to test cancellation", default="or enter text")
+        await hitl_collect(prompt="Press Ctrl+C to test cancellation", default="or enter text")
         print("Input received successfully\n")
     except Exception as e:
         print(f"Caught exception: {e}\n")
 
     # Final notification
-    await notify_completion(
+    await hitl_notify(
         title="Testing Complete",
         message="All enhancements have been tested!\n\nNew features:\n- Visual separators ✅\n- Markdown rendering ✅\n- Checkbox improvements ✅\n- Escape handling ✅",
         notification_type="success",

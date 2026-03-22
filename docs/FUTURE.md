@@ -323,45 +323,7 @@ This document tracks potential improvements and features for future consideratio
 3. **Monitoring**: Log all tool calls for audit trail
 4. **Principle of least privilege**: Run server as non-root user
 
-## Plugin Architecture
 
-**Status**: Plugin framework development moved to dedicated repository.
-
-HITL MCP CLI will gain plugin support through the **[MCP Plugin Server](https://github.com/geehexx/mcp-plugin-server)** framework. This generic, reusable framework enables:
-
-- Plugin-based extensibility for any MCP server
-- Wrapper mode to enhance existing MCP servers
-- Standalone mode to build complete servers from plugins
-- Robust validation and per-plugin logging
-
-See the [MCP Plugin Server documentation](https://github.com/geehexx/mcp-plugin-server/tree/main/docs) for comprehensive details on:
-
-- Plugin architecture and design
-- API specifications and contracts
-- Implementation guide and examples
-- Integration path for HITL
-
-### HITL-Specific Plugin Enhancements
-
-Once the plugin framework is ready, HITL-specific enhancements to consider:
-
-#### Web UI Plugin
-
-- Browser-based interface for remote access
-- WebSocket for real-time updates
-- Mobile-responsive design
-
-#### Slack Integration Plugin
-
-- Post prompts as Slack messages
-- Interactive components (buttons, select menus)
-- Team collaboration and audit trail
-
-#### AI Router Plugin (RITL/NITL)
-
-- AI-powered decision routing
-- Confidence-based escalation to humans
-- Learning from past interactions
 
 ## UI/UX Audit - 2025-11-10
 
@@ -587,4 +549,3 @@ If the answer to any question is "no" or "maybe", defer the enhancement.
 - Advanced UI features
 - New tool types
 - Integration examples
-- Plugin support (depends on [mcp-plugin-server](https://github.com/geehexx/mcp-plugin-server))

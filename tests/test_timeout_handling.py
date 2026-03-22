@@ -17,73 +17,73 @@ async def mcp_client() -> Client:
 
 
 @pytest.mark.asyncio
-async def test_request_text_input_timeout_error(mcp_client: Client) -> None:
+async def test_hitl_collect_timeout_error(mcp_client: Client) -> None:
     """Test text input handles timeout errors gracefully."""
     with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock:
         mock.side_effect = TimeoutError("Request timed out")
 
         with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("request_text_input", {"prompt": "Test:"})
+            await mcp_client.call_tool("hitl_collect", {"message": "Test:"})
 
         assert "Input collection failed" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
-async def test_request_selection_timeout_error(mcp_client: Client) -> None:
+async def test_hitl_choose_timeout_error(mcp_client: Client) -> None:
     """Test selection handles timeout errors gracefully."""
     with patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock:
         mock.side_effect = TimeoutError("Request timed out")
 
         with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("request_selection", {"prompt": "Choose:", "choices": ["A", "B"]})
+            await mcp_client.call_tool("hitl_choose", {"message": "Choose:", "choices": ["A", "B"]})
 
         assert "Selection failed" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
-async def test_request_confirmation_timeout_error(mcp_client: Client) -> None:
+async def test_hitl_confirm_timeout_error(mcp_client: Client) -> None:
     """Test confirmation handles timeout errors gracefully."""
     with patch("hitl_mcp_cli.server.prompt_confirm", new_callable=AsyncMock) as mock:
         mock.side_effect = TimeoutError("Request timed out")
 
         with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("request_confirmation", {"prompt": "Proceed?"})
+            await mcp_client.call_tool("hitl_confirm", {"message": "Proceed?"})
 
         assert "Confirmation failed" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
-async def test_request_path_input_timeout_error(mcp_client: Client) -> None:
+async def test_hitl_collect_path_timeout_error(mcp_client: Client) -> None:
     """Test path input handles timeout errors gracefully."""
     with patch("hitl_mcp_cli.server.prompt_path", new_callable=AsyncMock) as mock:
         mock.side_effect = TimeoutError("Request timed out")
 
         with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("request_path_input", {"prompt": "Select path:"})
-
-        assert "Path input failed" in str(exc_info.value)
-
-
-@pytest.mark.asyncio
-async def test_request_text_input_connection_error(mcp_client: Client) -> None:
-    """Test text input handles connection errors gracefully."""
-    with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock:
-        mock.side_effect = ConnectionError("Connection lost")
-
-        with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("request_text_input", {"prompt": "Test:"})
+            await mcp_client.call_tool("hitl_collect", {"message": "Select path:", "input_type": "path"})
 
         assert "Input collection failed" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
-async def test_request_selection_connection_error(mcp_client: Client) -> None:
+async def test_hitl_collect_connection_error(mcp_client: Client) -> None:
+    """Test text input handles connection errors gracefully."""
+    with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock:
+        mock.side_effect = ConnectionError("Connection lost")
+
+        with pytest.raises(Exception) as exc_info:
+            await mcp_client.call_tool("hitl_collect", {"message": "Test:"})
+
+        assert "Input collection failed" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_hitl_choose_connection_error(mcp_client: Client) -> None:
     """Test selection handles connection errors gracefully."""
     with patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock:
         mock.side_effect = ConnectionError("Connection lost")
 
         with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("request_selection", {"prompt": "Choose:", "choices": ["A", "B"]})
+            await mcp_client.call_tool("hitl_choose", {"message": "Choose:", "choices": ["A", "B"]})
 
         assert "Selection failed" in str(exc_info.value)
 
@@ -92,14 +92,14 @@ async def test_request_selection_connection_error(mcp_client: Client) -> None:
 async def test_long_running_operation_success(mcp_client: Client) -> None:
     """Test that long-running operations complete successfully."""
     with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock:
-        # Simulate a slow user response (5 seconds)
-        async def slow_response(*args, **kwargs):
-            await asyncio.sleep(0.1)  # Simulate delay
+
+        async def slow_response(*args: object, **kwargs: object) -> str:
+            await asyncio.sleep(0.1)
             return "Slow response"
 
         mock.side_effect = slow_response
 
-        result = await mcp_client.call_tool("request_text_input", {"prompt": "Test:"})
+        result = await mcp_client.call_tool("hitl_collect", {"message": "Test:"})
 
         assert result is not None
         assert result.data == "Slow response"
@@ -117,16 +117,13 @@ async def test_multiple_sequential_calls(mcp_client: Client) -> None:
         mock_select.return_value = "Option A"
         mock_confirm.return_value = True
 
-        # Call multiple tools in sequence
-        result1 = await mcp_client.call_tool("request_text_input", {"prompt": "Name:"})
-        result2 = await mcp_client.call_tool(
-            "request_selection", {"prompt": "Choose:", "choices": ["A", "B"]}
-        )
-        result3 = await mcp_client.call_tool("request_confirmation", {"prompt": "Proceed?"})
+        result1 = await mcp_client.call_tool("hitl_collect", {"message": "Name:"})
+        result2 = await mcp_client.call_tool("hitl_choose", {"message": "Choose:", "choices": ["A", "B"]})
+        result3 = await mcp_client.call_tool("hitl_confirm", {"message": "Proceed?"})
 
         assert result1.data == "Test Input"
         assert result2.data == "Option A"
-        assert result3.data is True
+        assert result3.data == {"action": "accept"}
 
 
 @pytest.mark.asyncio
@@ -135,9 +132,7 @@ async def test_concurrent_tool_calls(mcp_client: Client) -> None:
     with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock:
         mock.return_value = "Concurrent response"
 
-        # Note: In real usage, HITL tools should be called sequentially
-        # This test verifies the server can handle concurrent requests
-        tasks = [mcp_client.call_tool("request_text_input", {"prompt": f"Test {i}:"}) for i in range(3)]
+        tasks = [mcp_client.call_tool("hitl_collect", {"message": f"Test {i}:"}) for i in range(3)]
 
         results = await asyncio.gather(*tasks)
 
@@ -149,13 +144,10 @@ async def test_concurrent_tool_calls(mcp_client: Client) -> None:
 async def test_error_recovery_after_failure(mcp_client: Client) -> None:
     """Test that server recovers after a tool call failure."""
     with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock:
-        # First call fails
         mock.side_effect = [ValueError("First call failed"), "Second call success"]
 
-        # First call should fail
         with pytest.raises(Exception):
-            await mcp_client.call_tool("request_text_input", {"prompt": "Test 1:"})
+            await mcp_client.call_tool("hitl_collect", {"message": "Test 1:"})
 
-        # Second call should succeed
-        result = await mcp_client.call_tool("request_text_input", {"prompt": "Test 2:"})
+        result = await mcp_client.call_tool("hitl_collect", {"message": "Test 2:"})
         assert result.data == "Second call success"

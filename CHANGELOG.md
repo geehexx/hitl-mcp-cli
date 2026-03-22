@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-03-22
+
+### Changed
+- Renamed tools to `hitl_*` taxonomy: `hitl_collect`, `hitl_choose`, `hitl_confirm`, `hitl_notify`
+- Merged `request_text_input` and `request_path_input` into `hitl_collect` (use `input_type` param)
+- Added `severity` parameter to `hitl_confirm` (low/medium/high)
+- Added `options` dict format to `hitl_choose` for rich option descriptions
+
+### Added
+- New `hitl_approve_workflow` tool for synchronous workflow approval with timeout
+
+### Removed
+- Plugin framework references from README and roadmap
+
 ## [Unreleased]
 
 ### Added

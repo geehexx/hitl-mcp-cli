@@ -1,131 +1,49 @@
 """FastMCP server for interactive user input."""
 
-from typing import Literal
+import asyncio
+from typing import Any, Literal
 
 from fastmcp import FastMCP
 
 from .ui import display_notification, prompt_checkbox, prompt_confirm, prompt_path, prompt_select, prompt_text
 
 mcp = FastMCP(
-    name="Interactive Input Server",
-    instructions="""
-# Interactive User Input Server
-
-This server provides tools for requesting user input and feedback during agent execution.
-
-## Core Principle
-
-Tools enable real-time user input during execution, eliminating assumptions. Use liberally for ANY uncertainty.
-
-## When to Invoke (Timing Triggers)
-
-- **Immediately** when encountering uncertainty (don't batch, don't defer)
-- **Before beginning large work** (allow plan review, prevent wasted effort)
-- **Before ending session** (check for additional work, prevent premature termination)
-- **At inflection points** (milestone completion, approach changes, scope shifts)
-
-## What Constitutes Uncertainty (Usage Categories)
-
-- **Ambiguous requirements** (multiple interpretations, unclear scope, undefined success criteria)
-- **Missing information** (parameters, target files, configuration values)
-- **Decision points** (multiple valid approaches, trade-offs, naming, file organization)
-- **Confirmations** (destructive operations, expensive operations, breaking changes)
-- **Preferences** (code style, implementation patterns, testing strategies, documentation format)
-
-## Which Tool to Use (Selection Logic)
-
-- `request_text_input`: Free-form input (names, descriptions, paths, multi-line content)
-- `request_selection`: Enumerable options (≤10 choices with trade-offs)
-- `request_confirmation`: Binary decisions (yes/no, proceed/cancel)
-- `request_path_input`: File/directory paths with validation
-- `notify_completion`: Status updates (success, info, warning, error)
-
-## Session Continuity Benefits
-
-- Prevents premature termination (user can queue multiple tasks)
-- Reduces token waste (avoids context reload in new sessions)
-- Enables continuous work flow (chain tasks without interruption)
-- Early course correction (fix approach before wasting implementation effort)
-
-## Best Practices
-
-- Always provide clear, specific prompts with context
-- Use `request_selection` with meaningful choices when options are limited
-- Use `request_confirmation` for yes/no decisions
-- Use `notify_completion` to inform user of major milestone completions
-- When calling tools, explain your reasoning to help users understand your thought process
-
-## Tool Usage Patterns
-
-### Clarification Pattern
-When requirements are ambiguous:
-1. Use `request_text_input` or `request_selection` to ask specific questions
-2. Proceed only after receiving clear answers
-
-### Approval Pattern
-Before performing significant actions:
-1. Explain what you plan to do
-2. Use `request_confirmation` to get explicit approval
-3. Proceed only if confirmed
-
-### Choice Pattern
-When multiple valid approaches exist:
-1. Use `request_selection` with `choices` listing the approaches
-2. Provide brief descriptions in each choice string
-3. Implement the chosen approach
-
-### Information Gathering Pattern
-For collecting structured data:
-1. Use multiple `request_text_input` calls with validation
-2. Use `request_path_input` for file/directory paths
-3. Use `request_selection` when valid values are constrained
-
-## Important Notes
-
-- These tools will pause agent execution until user responds (infinite timeout configured)
-- Always provide context in your prompts - users may not remember previous messages
-- Default values and clear choices improve user experience
-- Use validation to prevent invalid input when possible
-- If you're uncertain about anything, ASK - that's what these tools are for
-
-## Meta-Development Note
-
-This HITL MCP server is also used during its own development. When working on this project:
-- Use these tools to clarify requirements and get user feedback
-- The "user" in development context is the project maintainer
-- Don't confuse the development usage with the production usage examples
-""",
+    name="HITL MCP Server",
+    instructions=(
+        "Human-in-the-Loop MCP server. Provides tools for AI agents to request human input, "
+        "confirmation, and approval at critical decision points. All tools block until the user "
+        "responds, ensuring human oversight of consequential actions."
+    ),
 )
 
 
 @mcp.tool()
-async def request_text_input(
-    prompt: str, default: str | None = None, multiline: bool = False, validate_pattern: str | None = None
+async def hitl_collect(
+    message: str,
+    input_type: Literal["text", "path", "multiline"] = "text",
+    default: str | None = None,
+    validation_pattern: str | None = None,
+    validation_message: str | None = None,
 ) -> str:
-    """Request text input from the user.
-
-    Use this when you need free-form text input like names, descriptions, or configuration values.
-    Perfect for collecting information that doesn't fit predefined choices.
+    """Collect a single input value from the user. Use for text, file paths, or multiline content. Blocks until the user responds.
 
     Args:
-        prompt: Clear, specific question to ask the user
+        message: Clear, specific question to ask the user
+        input_type: "text" for single-line, "path" for file paths with completion, "multiline" for multi-line (Esc+Enter to submit)
         default: Pre-filled value the user can accept or modify
-        multiline: Enable for longer text like descriptions or code snippets
-        validate_pattern: Regex pattern to ensure input format (e.g., r"^[a-z0-9-]+$" for slugs)
-                         Keep patterns simple to avoid performance issues. Avoid nested quantifiers.
+        validation_pattern: Regex pattern to validate input (e.g., r"^[a-z0-9-]+$" for slugs)
+        validation_message: Custom message shown when validation fails
 
     Returns:
-        The user's text input
-
-    Example:
-        name = await request_text_input(
-            prompt="What should we name this project?",
-            default="my-project",
-            validate_pattern=r"^[a-z0-9-]+$"
-        )
+        The user's input string
     """
     try:
-        result: str = await prompt_text(prompt, default, multiline, validate_pattern)
+        if input_type == "path":
+            result: str = await prompt_path(message, "any", False, default)
+        elif input_type == "multiline":
+            result = await prompt_text(message, default, True, validation_pattern)
+        else:
+            result = await prompt_text(message, default, False, validation_pattern)
         return result
     except KeyboardInterrupt:
         raise Exception("User cancelled input (Ctrl+C)") from None
@@ -134,35 +52,51 @@ async def request_text_input(
 
 
 @mcp.tool()
-async def request_selection(
-    prompt: str, choices: list[str], default: str | None = None, allow_multiple: bool = False
+async def hitl_choose(
+    message: str,
+    choices: list[str] | None = None,
+    options: list[dict[str, str]] | None = None,
+    multiple: bool = False,
+    default: str | None = None,
+    fuzzy_search: bool | None = None,
 ) -> str | list[str]:
-    """Request user to select from predefined options.
-
-    Use this when presenting multiple approaches, configurations, or options where the user
-    should choose. Much better UX than free-form text when options are known.
+    """Present a list of options for the user to select from. Supports single or multiple selection, fuzzy search for long lists, and rich option descriptions.
 
     Args:
-        prompt: Clear question explaining what to choose
-        choices: List of options (be descriptive, e.g., "Option A: Fast but risky")
-        default: Pre-selected option for convenience
-        allow_multiple: Enable checkbox mode for selecting multiple items
+        message: Clear question explaining what to choose
+        choices: Simple list of option strings (e.g., ["Option A", "Option B"])
+        options: Rich options with value/label/description dicts (e.g., [{"value": "a", "label": "Option A", "description": "Fast"}])
+        multiple: Enable checkbox mode for selecting multiple items
+        default: Pre-selected option value
+        fuzzy_search: Force fuzzy search on/off (auto-enabled for >15 items)
 
     Returns:
-        Selected choice (string) or choices (list) if allow_multiple=True
-
-    Example:
-        env = await request_selection(
-            prompt="Which environment should I deploy to?",
-            choices=["Development", "Staging", "Production"],
-            default="Staging"
-        )
+        Selected value (string) or values (list) if multiple=True
     """
+    if not choices and not options:
+        raise Exception("At least one of 'choices' or 'options' must be provided")
+
+    # Build display_to_value mapping when options format used
+    display_to_value: dict[str, str] | None = None
+    if options and not choices:
+        display_to_value = {}
+        choices = []
+        for opt in options:
+            label = opt.get("label", opt.get("value", ""))
+            desc = opt.get("description", "")
+            display = f"{label}: {desc}" if desc else label
+            choices.append(display)
+            display_to_value[display] = opt.get("value", label)
+
+    assert choices is not None  # guaranteed by validation above
+
     try:
-        if allow_multiple:
-            result: list[str] = await prompt_checkbox(prompt, choices)
+        if multiple:
+            result: list[str] = await prompt_checkbox(message, choices)
             return result
-        result_str: str = await prompt_select(prompt, choices, default)
+        result_str: str = await prompt_select(message, choices, default)
+        if display_to_value is not None:
+            return display_to_value.get(result_str, result_str)
         return result_str
     except KeyboardInterrupt:
         raise Exception("User cancelled selection (Ctrl+C)") from None
@@ -171,100 +105,114 @@ async def request_selection(
 
 
 @mcp.tool()
-async def request_confirmation(prompt: str, default: bool = False) -> bool:
-    """Request yes/no confirmation from the user.
-
-    Use this before destructive operations, expensive API calls, or whenever you need
-    explicit approval. Always explain what will happen if they confirm.
+async def hitl_confirm(
+    message: str,
+    default: bool = False,
+    severity: Literal["low", "medium", "high"] = "medium",
+) -> dict[str, str]:
+    """Ask the user to confirm or reject an action. Use severity='high' for destructive or irreversible operations.
 
     Args:
-        prompt: Clear yes/no question explaining the action (e.g., "Delete 50 files?")
+        message: Clear yes/no question explaining the action
         default: Default answer - use False for destructive operations
+        severity: "low" (default yes), "medium" (standard), "high" (red warning, requires typed "yes")
 
     Returns:
-        True if user confirms, False otherwise
-
-    Example:
-        confirmed = await request_confirmation(
-            prompt="I will delete 50 unused dependencies. Proceed?",
-            default=False
-        )
-        if confirmed:
-            # Proceed with operation
+        Dict with 'action': 'accept' (confirmed), 'decline' (rejected), or 'cancel' (Ctrl+C)
     """
     try:
-        result: bool = await prompt_confirm(prompt, default)
-        return result
+        if severity == "low":
+            result: bool = await prompt_confirm(message, default=True)
+        elif severity == "high":
+            result = await prompt_confirm_high(message)
+        else:
+            result = await prompt_confirm(message, default)
+        return {"action": "accept" if result else "decline"}
     except KeyboardInterrupt:
-        raise Exception("User cancelled confirmation (Ctrl+C)") from None
+        return {"action": "cancel"}
     except Exception as e:
         raise Exception(f"Confirmation failed: {str(e)}") from e
 
 
 @mcp.tool()
-async def request_path_input(
-    prompt: str,
-    path_type: Literal["file", "directory", "any"] = "any",
-    must_exist: bool = False,
-    default: str | None = None,
-) -> str:
-    """Request file/directory path from user with validation.
-
-    Use this for selecting config files, output directories, or any filesystem paths.
-    Provides path completion and validation for better UX.
-
-    Args:
-        prompt: Clear question about what path is needed
-        path_type: "file" for files, "directory" for folders, "any" for either
-        must_exist: Validate that path exists (use False if you'll create it)
-        default: Pre-filled path for convenience
-
-    Returns:
-        Absolute, resolved path string
-
-    Example:
-        config = await request_path_input(
-            prompt="Select configuration file:",
-            path_type="file",
-            must_exist=True,
-            default="./config.yaml"
-        )
-    """
-    try:
-        result: str = await prompt_path(prompt, path_type, must_exist, default)
-        return result
-    except KeyboardInterrupt:
-        raise Exception("User cancelled path input (Ctrl+C)") from None
-    except Exception as e:
-        raise Exception(f"Path input failed: {str(e)}") from e
-
-
-@mcp.tool()
-async def notify_completion(
-    title: str, message: str, notification_type: Literal["success", "info", "warning", "error"] = "info"
+async def hitl_notify(
+    message: str,
+    level: Literal["success", "info", "warning", "error"] = "info",
+    title: str | None = None,
 ) -> dict[str, bool]:
-    """Display a styled notification to the user.
-
-    Use this to confirm successful operations, report errors, or highlight important
-    information. Great for providing feedback after completing tasks.
+    """Display a styled notification to the user. Non-blocking — does not wait for user input. Use for progress updates, completion notices, and status changes.
 
     Args:
-        title: Short, clear title (e.g., "Deployment Complete")
-        message: Detailed message (supports multi-line with \n)
-        notification_type: "success" (green), "info" (blue), "warning" (yellow), "error" (red)
+        message: Detailed message (supports multi-line with newlines)
+        level: "success" (green), "info" (blue), "warning" (yellow), "error" (red)
+        title: Optional short title for the notification
 
     Returns:
         Dict with 'acknowledged' key (always True)
-
-    Example:
-        await notify_completion(
-            title="Deployment Complete",
-            message="Successfully deployed v2.1.0 to production\n\nURL: https://app.example.com",
-            notification_type="success"
-        )
     """
     try:
-        display_notification(title, message, notification_type)
+        display_notification(title or level.capitalize(), message, level)
         return {"acknowledged": True}
     except Exception as e:
         raise Exception(f"Notification display failed: {str(e)}") from e
+
+
+@mcp.tool()
+async def hitl_approve_workflow(
+    message: str,
+    context: str | None = None,
+    options: list[str] | None = None,
+    timeout_seconds: int = 300,
+    severity: Literal["low", "medium", "high"] = "high",
+) -> dict[str, Any]:
+    """Request explicit human approval before proceeding with a significant workflow step. Blocks until approved, rejected, or timed out. Use for deploying to production, deleting data, sending external communications, or any irreversible action.
+
+    Args:
+        message: What needs approval
+        context: Additional details to display
+        options: Choices (default: ["Approve", "Reject"])
+        timeout_seconds: Seconds to wait (0 = infinite, default 300)
+        severity: Visual severity level
+
+    Returns:
+        Dict with 'approved' (bool), 'choice' (str), 'timed_out' (bool)
+    """
+    effective_options = options or ["Approve", "Reject"]
+
+    try:
+        # Display context if provided
+        if context:
+            display_notification("Approval Required", f"{message}\n\n{context}", "warning")
+        else:
+            display_notification("Approval Required", message, "warning")
+
+        # Use select for the approval choice, with optional timeout
+        if timeout_seconds > 0:
+            try:
+                choice: str = await asyncio.wait_for(
+                    prompt_select(message, effective_options, None),
+                    timeout=timeout_seconds,
+                )
+            except TimeoutError:
+                return {"approved": False, "choice": "", "timed_out": True}
+        else:
+            choice = await prompt_select(message, effective_options, None)
+
+        approved = choice == effective_options[0]
+        return {"approved": approved, "choice": choice, "timed_out": False}
+    except KeyboardInterrupt:
+        raise Exception("User cancelled approval (Ctrl+C)") from None
+    except Exception as e:
+        raise Exception(f"Approval workflow failed: {str(e)}") from e
+
+
+async def prompt_confirm_high(message: str) -> bool:
+    """High-severity confirmation requiring typed 'yes'."""
+    display_notification("⚠️  HIGH SEVERITY", message, "error")
+    result: str = await prompt_text(
+        'Type "yes" to confirm this action:',
+        default=None,
+        multiline=False,
+        validate_pattern=None,
+    )
+    return result.strip().lower() == "yes"

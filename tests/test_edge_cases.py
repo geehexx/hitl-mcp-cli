@@ -27,7 +27,7 @@ class TestInputEdgeCases:
         with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock_prompt:
             mock_prompt.return_value = ""
 
-            result = await mcp_client.call_tool("request_text_input", {"prompt": "Enter text:"})
+            result = await mcp_client.call_tool("hitl_collect", {"message": "Enter text:"})
 
             assert result is not None
             assert result.data == ""
@@ -39,7 +39,7 @@ class TestInputEdgeCases:
         with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock_prompt:
             mock_prompt.return_value = "   \t\n  "
 
-            result = await mcp_client.call_tool("request_text_input", {"prompt": "Enter text:"})
+            result = await mcp_client.call_tool("hitl_collect", {"message": "Enter text:"})
 
             assert result is not None
             assert result.data == "   \t\n  "
@@ -51,7 +51,7 @@ class TestInputEdgeCases:
         with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock_prompt:
             mock_prompt.return_value = "Hello 世界 🌍 🚀 ñ é"
 
-            result = await mcp_client.call_tool("request_text_input", {"prompt": "Enter text:"})
+            result = await mcp_client.call_tool("hitl_collect", {"message": "Enter text:"})
 
             assert result is not None
             assert result.data == "Hello 世界 🌍 🚀 ñ é"
@@ -64,7 +64,7 @@ class TestInputEdgeCases:
             long_text = "A" * 10000
             mock_prompt.return_value = long_text
 
-            result = await mcp_client.call_tool("request_text_input", {"prompt": "Enter text:"})
+            result = await mcp_client.call_tool("hitl_collect", {"message": "Enter text:"})
 
             assert result is not None
             assert result.data == long_text
@@ -78,7 +78,7 @@ class TestInputEdgeCases:
             mock_prompt.return_value = multiline_text
 
             result = await mcp_client.call_tool(
-                "request_text_input", {"prompt": "Enter text:", "multiline": True}
+                "hitl_collect", {"message": "Enter text:", "input_type": "multiline"}
             )
 
             assert result is not None
@@ -92,7 +92,7 @@ class TestInputEdgeCases:
             mock_prompt.return_value = "response"
 
             result = await mcp_client.call_tool(
-                "request_text_input", {"prompt": 'Enter <value> with "quotes" & special chars: $#@!'}
+                "hitl_collect", {"message": 'Enter <value> with "quotes" & special chars: $#@!'}
             )
 
             assert result is not None
@@ -109,7 +109,7 @@ class TestSelectionEdgeCases:
             mock_select.return_value = "Only Option"
 
             result = await mcp_client.call_tool(
-                "request_selection", {"prompt": "Select:", "choices": ["Only Option"]}
+                "hitl_choose", {"message": "Select:", "choices": ["Only Option"]}
             )
 
             assert result is not None
@@ -123,9 +123,9 @@ class TestSelectionEdgeCases:
             mock_select.return_value = 'Option with "quotes" & <tags>'
 
             result = await mcp_client.call_tool(
-                "request_selection",
+                "hitl_choose",
                 {
-                    "prompt": "Select:",
+                    "message": "Select:",
                     "choices": ['Option with "quotes" & <tags>', "Normal option"],
                 },
             )
@@ -142,7 +142,7 @@ class TestSelectionEdgeCases:
             mock_select.return_value = long_choice
 
             result = await mcp_client.call_tool(
-                "request_selection", {"prompt": "Select:", "choices": [long_choice, "Short"]}
+                "hitl_choose", {"message": "Select:", "choices": [long_choice, "Short"]}
             )
 
             assert result is not None
@@ -156,9 +156,7 @@ class TestSelectionEdgeCases:
             choices = [f"Option {i}" for i in range(100)]
             mock_select.return_value = "Option 50"
 
-            result = await mcp_client.call_tool(
-                "request_selection", {"prompt": "Select:", "choices": choices}
-            )
+            result = await mcp_client.call_tool("hitl_choose", {"message": "Select:", "choices": choices})
 
             assert result is not None
             assert result.data == "Option 50"
@@ -171,8 +169,8 @@ class TestSelectionEdgeCases:
             mock_checkbox.return_value = []
 
             result = await mcp_client.call_tool(
-                "request_selection",
-                {"prompt": "Select:", "choices": ["A", "B", "C"], "allow_multiple": True},
+                "hitl_choose",
+                {"message": "Select:", "choices": ["A", "B", "C"], "multiple": True},
             )
 
             assert result is not None
@@ -186,8 +184,8 @@ class TestSelectionEdgeCases:
             mock_checkbox.return_value = ["A", "B", "C"]
 
             result = await mcp_client.call_tool(
-                "request_selection",
-                {"prompt": "Select:", "choices": ["A", "B", "C"], "allow_multiple": True},
+                "hitl_choose",
+                {"message": "Select:", "choices": ["A", "B", "C"], "multiple": True},
             )
 
             assert result is not None
@@ -205,7 +203,7 @@ class TestPathEdgeCases:
             mock_path.return_value = "/home/user/My Documents/file.txt"
 
             result = await mcp_client.call_tool(
-                "request_path_input", {"prompt": "Select file:", "path_type": "file"}
+                "hitl_collect", {"message": "Select file:", "input_type": "path"}
             )
 
             assert result is not None
@@ -219,7 +217,7 @@ class TestPathEdgeCases:
             mock_path.return_value = "/home/user/文档/файл.txt"
 
             result = await mcp_client.call_tool(
-                "request_path_input", {"prompt": "Select file:", "path_type": "file"}
+                "hitl_collect", {"message": "Select file:", "input_type": "path"}
             )
 
             assert result is not None
@@ -234,7 +232,7 @@ class TestPathEdgeCases:
             mock_path.return_value = long_path
 
             result = await mcp_client.call_tool(
-                "request_path_input", {"prompt": "Select file:", "path_type": "file"}
+                "hitl_collect", {"message": "Select file:", "input_type": "path"}
             )
 
             assert result is not None
@@ -249,7 +247,7 @@ class TestNotificationEdgeCases:
     async def test_empty_message(self, mcp_client: Client) -> None:
         """Test notification with empty message."""
         with patch("hitl_mcp_cli.server.display_notification"):
-            result = await mcp_client.call_tool("notify_completion", {"title": "Title", "message": ""})
+            result = await mcp_client.call_tool("hitl_notify", {"message": ""})
 
             assert result is not None
             assert result.data == {"acknowledged": True}
@@ -261,9 +259,7 @@ class TestNotificationEdgeCases:
         with patch("hitl_mcp_cli.server.display_notification"):
             long_message = "A" * 10000
 
-            result = await mcp_client.call_tool(
-                "notify_completion", {"title": "Title", "message": long_message}
-            )
+            result = await mcp_client.call_tool("hitl_notify", {"message": long_message})
 
             assert result is not None
             assert result.data == {"acknowledged": True}
@@ -275,7 +271,7 @@ class TestNotificationEdgeCases:
         with patch("hitl_mcp_cli.server.display_notification"):
             multiline = "Line 1\nLine 2\nLine 3\n\nLine 5"
 
-            result = await mcp_client.call_tool("notify_completion", {"title": "Title", "message": multiline})
+            result = await mcp_client.call_tool("hitl_notify", {"message": multiline})
 
             assert result is not None
             assert result.data == {"acknowledged": True}
@@ -287,7 +283,7 @@ class TestNotificationEdgeCases:
         with patch("hitl_mcp_cli.server.display_notification"):
             formatted = "**Bold** _italic_ `code` [link](url) <tag>"
 
-            result = await mcp_client.call_tool("notify_completion", {"title": "Title", "message": formatted})
+            result = await mcp_client.call_tool("hitl_notify", {"message": formatted})
 
             assert result is not None
             assert result.data == {"acknowledged": True}

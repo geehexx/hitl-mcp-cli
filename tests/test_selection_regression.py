@@ -16,18 +16,18 @@ async def mcp_client() -> Client:
 
 
 @pytest.mark.asyncio
-async def test_request_selection_short_list(mcp_client: Client) -> None:
+async def test_hitl_choose_short_list(mcp_client: Client) -> None:
     """Test selection with short list uses select prompt."""
     with patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock:
         mock.return_value = "Option B"
 
         result = await mcp_client.call_tool(
-            "request_selection",
+            "hitl_choose",
             {
-                "prompt": "Choose an option:",
+                "message": "Choose an option:",
                 "choices": ["Option A", "Option B", "Option C"],
                 "default": "Option A",
-                "allow_multiple": False,
+                "multiple": False,
             },
         )
 
@@ -37,7 +37,7 @@ async def test_request_selection_short_list(mcp_client: Client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_request_selection_long_list(mcp_client: Client) -> None:
+async def test_hitl_choose_long_list(mcp_client: Client) -> None:
     """Test selection with long list (>15 items) uses fuzzy search."""
     long_choices = [f"Option {i}" for i in range(20)]
 
@@ -45,11 +45,11 @@ async def test_request_selection_long_list(mcp_client: Client) -> None:
         mock.return_value = "Option 10"
 
         result = await mcp_client.call_tool(
-            "request_selection",
+            "hitl_choose",
             {
-                "prompt": "Choose from many options:",
+                "message": "Choose from many options:",
                 "choices": long_choices,
-                "allow_multiple": False,
+                "multiple": False,
             },
         )
 
@@ -59,17 +59,17 @@ async def test_request_selection_long_list(mcp_client: Client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_request_selection_multiple(mcp_client: Client) -> None:
+async def test_hitl_choose_multiple(mcp_client: Client) -> None:
     """Test multiple selection uses checkbox prompt."""
     with patch("hitl_mcp_cli.server.prompt_checkbox", new_callable=AsyncMock) as mock:
         mock.return_value = ["Option A", "Option C"]
 
         result = await mcp_client.call_tool(
-            "request_selection",
+            "hitl_choose",
             {
-                "prompt": "Choose multiple:",
+                "message": "Choose multiple:",
                 "choices": ["Option A", "Option B", "Option C"],
-                "allow_multiple": True,
+                "multiple": True,
             },
         )
 
@@ -93,7 +93,6 @@ async def test_prompt_select_short_list_uses_select() -> None:
 
         assert result == "Choice 5"
         mock_select.assert_called_once()
-        # Verify fuzzy was NOT called
         assert mock_select.call_count == 1
 
 
@@ -199,8 +198,8 @@ async def test_prompt_select_keyboard_interrupt() -> None:
 
 
 @pytest.mark.asyncio
-async def test_request_selection_keyboard_interrupt(mcp_client: Client) -> None:
-    """Test request_selection converts KeyboardInterrupt to user-friendly error."""
+async def test_hitl_choose_keyboard_interrupt(mcp_client: Client) -> None:
+    """Test hitl_choose converts KeyboardInterrupt to user-friendly error."""
     from fastmcp.exceptions import ToolError
 
     with patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock:
@@ -208,16 +207,16 @@ async def test_request_selection_keyboard_interrupt(mcp_client: Client) -> None:
 
         with pytest.raises(ToolError) as exc_info:
             await mcp_client.call_tool(
-                "request_selection",
-                {"prompt": "Choose:", "choices": ["A", "B"], "allow_multiple": False},
+                "hitl_choose",
+                {"message": "Choose:", "choices": ["A", "B"], "multiple": False},
             )
 
         assert "User cancelled" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
-async def test_request_selection_generic_exception(mcp_client: Client) -> None:
-    """Test request_selection wraps generic exceptions with context."""
+async def test_hitl_choose_generic_exception(mcp_client: Client) -> None:
+    """Test hitl_choose wraps generic exceptions with context."""
     from fastmcp.exceptions import ToolError
 
     with patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock:
@@ -225,8 +224,8 @@ async def test_request_selection_generic_exception(mcp_client: Client) -> None:
 
         with pytest.raises(ToolError) as exc_info:
             await mcp_client.call_tool(
-                "request_selection",
-                {"prompt": "Choose:", "choices": ["A", "B"], "allow_multiple": False},
+                "hitl_choose",
+                {"message": "Choose:", "choices": ["A", "B"], "multiple": False},
             )
 
         assert "Selection failed" in str(exc_info.value)
