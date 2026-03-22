@@ -4,6 +4,9 @@ import argparse
 import logging
 import os
 
+import anyio
+from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+
 from .server import mcp
 from .ui import display_banner
 
@@ -88,6 +91,18 @@ def main() -> None:
         # Suppress expected lifecycle noise from FastMCP stateless HTTP cleanup
         for _logger_name in ("mcp.server.streamable_http", "mcp.server.lowlevel.server"):
             logging.getLogger(_logger_name).addFilter(_SuppressClosedResource())
+
+        # Monkey-patch: fix mcp-sdk 1.21.0 bug #823 — ExceptionGroup from
+        # ClosedResourceError/BrokenResourceError kills stateless HTTP sessions.
+        _orig_handle = StreamableHTTPSessionManager._handle_stateless_request
+
+        async def _patched_handle_stateless(self, scope, receive, send):  # type: ignore[no-untyped-def]
+            try:
+                await _orig_handle(self, scope, receive, send)
+            except* (anyio.ClosedResourceError, anyio.BrokenResourceError):
+                logger.debug("Client disconnected mid-request — stateless session ended cleanly")
+
+        StreamableHTTPSessionManager._handle_stateless_request = _patched_handle_stateless  # type: ignore[method-assign]
 
         mcp.run(
             transport="streamable-http",

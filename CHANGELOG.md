@@ -22,6 +22,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Enable `stateless_http=True` for streamable-http transport (fixes ClientDisconnect errors with Kiro CLI and other stateless MCP clients)
 
+## [0.6.0] - 2026-03-22
+
+### Fixed
+- HTTP connection timeout crash (mcp-sdk 1.21.0 bug #823 monkey-patch)
+- Single-line input overwrites question text (emoji wcwidth via Rich rendering)
+- Default text now shown as hint, not pre-filled buffer
+- Wrapping/blank line display issues
+- Off-by-one spacing in prompts
+
+### Added
+- `hitl_ask` alias for `hitl_collect`
+- `hitl_confirm` gains `context`, `timeout_seconds`, `timed_out` parameters
+- Interaction logging to `~/.local/state/hitl-mcp/interactions.jsonl`
+- `notes` parameter on all tools
+- Multi-choice escape hatch (free-text when all/none selected)
+
+### Removed
+- `hitl_approve_workflow` (merged into `hitl_confirm` severity=high)
+
+### Security
+- Rich markup escape on all user-controlled display strings
+
 ## [Unreleased]
 
 ### Added

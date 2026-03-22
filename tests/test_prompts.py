@@ -27,17 +27,40 @@ async def test_prompt_text_basic() -> None:
         assert result == "test input"
         mock_inquirer.assert_called_once()
 
+        # Verify emoji rendering is delegated to Rich (message/qmark empty)
+        call_kwargs = mock_inquirer.call_args[1]
+        assert call_kwargs["message"] == ""
+        assert call_kwargs["qmark"] == ""
+
 
 @pytest.mark.asyncio
 async def test_prompt_text_with_default() -> None:
-    """Test text input with default value."""
+    """Test text input with default value used as placeholder."""
     with patch("hitl_mcp_cli.ui.prompts.inquirer.text") as mock_inquirer:
         mock_result = MagicMock()
-        mock_result.execute.return_value = "default value"
+        # Simulate user submitting empty input — should return default
+        mock_result.execute.return_value = ""
         mock_inquirer.return_value = mock_result
 
         result = await prompt_text("Enter text:", default="default value")
         assert result == "default value"
+
+        # Verify default is NOT pre-filled in buffer (placeholder behavior)
+        call_kwargs = mock_inquirer.call_args[1]
+        assert call_kwargs["default"] == ""
+        assert "default value" in call_kwargs["long_instruction"]
+
+
+@pytest.mark.asyncio
+async def test_prompt_text_with_default_user_types() -> None:
+    """Test text input where user types over the default."""
+    with patch("hitl_mcp_cli.ui.prompts.inquirer.text") as mock_inquirer:
+        mock_result = MagicMock()
+        mock_result.execute.return_value = "user typed this"
+        mock_inquirer.return_value = mock_result
+
+        result = await prompt_text("Enter text:", default="default value")
+        assert result == "user typed this"
 
 
 @pytest.mark.asyncio
@@ -84,6 +107,11 @@ async def test_prompt_select_basic() -> None:
 
         result = await prompt_select("Choose:", ["Option A", "Option B", "Option C"])
         assert result == "Option B"
+
+        # Verify emoji rendering delegated to Rich
+        call_kwargs = mock_inquirer.call_args[1]
+        assert call_kwargs["message"] == ""
+        assert call_kwargs["qmark"] == ""
 
 
 @pytest.mark.asyncio
@@ -219,3 +247,90 @@ def test_display_notification_default_type() -> None:
     with patch("hitl_mcp_cli.ui.prompts.console") as mock_console:
         display_notification("Title", "Message")
         assert mock_console.print.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_prompt_text_with_notes() -> None:
+    """Test notes are displayed as dim text before prompt."""
+    with patch("hitl_mcp_cli.ui.prompts.inquirer.text") as mock_inquirer:
+        with patch("hitl_mcp_cli.ui.prompts.console") as mock_console:
+            mock_result = MagicMock()
+            mock_result.execute.return_value = "answer"
+            mock_inquirer.return_value = mock_result
+
+            result = await prompt_text("Question:", notes="Some context")
+            assert result == "answer"
+            # Verify notes rendered via console.print with dim markup
+            print_calls = [str(c) for c in mock_console.print.call_args_list]
+            assert any("[dim]" in c or "Some context" in c for c in print_calls)
+
+
+@pytest.mark.asyncio
+async def test_prompt_checkbox_escape_hatch_all_selected() -> None:
+    """Test escape hatch triggers when all choices selected."""
+    with patch("hitl_mcp_cli.ui.prompts.inquirer.checkbox") as mock_checkbox:
+        with patch("hitl_mcp_cli.ui.prompts.inquirer.text") as mock_text:
+            mock_cb_result = MagicMock()
+            mock_cb_result.execute.return_value = ["A", "B", "C"]
+            mock_checkbox.return_value = mock_cb_result
+
+            mock_text_result = MagicMock()
+            mock_text_result.execute.return_value = "I need all of them"
+            mock_text.return_value = mock_text_result
+
+            result = await prompt_checkbox("Pick:", ["A", "B", "C"])
+            assert result == {"selected": ["A", "B", "C"], "note": "I need all of them"}
+
+
+@pytest.mark.asyncio
+async def test_prompt_checkbox_escape_hatch_none_selected() -> None:
+    """Test escape hatch triggers when no choices selected."""
+    with patch("hitl_mcp_cli.ui.prompts.inquirer.checkbox") as mock_checkbox:
+        with patch("hitl_mcp_cli.ui.prompts.inquirer.text") as mock_text:
+            mock_cb_result = MagicMock()
+            mock_cb_result.execute.return_value = []
+            mock_checkbox.return_value = mock_cb_result
+
+            mock_text_result = MagicMock()
+            mock_text_result.execute.return_value = "None apply to my case"
+            mock_text.return_value = mock_text_result
+
+            result = await prompt_checkbox("Pick:", ["A", "B", "C"])
+            assert result == {"selected": [], "note": "None apply to my case"}
+
+
+@pytest.mark.asyncio
+async def test_prompt_checkbox_escape_hatch_skip() -> None:
+    """Test escape hatch skipped when user presses Enter without note."""
+    with patch("hitl_mcp_cli.ui.prompts.inquirer.checkbox") as mock_checkbox:
+        with patch("hitl_mcp_cli.ui.prompts.inquirer.text") as mock_text:
+            mock_cb_result = MagicMock()
+            mock_cb_result.execute.return_value = ["A", "B", "C"]
+            mock_checkbox.return_value = mock_cb_result
+
+            mock_text_result = MagicMock()
+            mock_text_result.execute.return_value = ""
+            mock_text.return_value = mock_text_result
+
+            result = await prompt_checkbox("Pick:", ["A", "B", "C"])
+            assert result == ["A", "B", "C"]
+
+
+@pytest.mark.asyncio
+async def test_prompt_checkbox_partial_no_escape_hatch() -> None:
+    """Test no escape hatch for partial selection."""
+    with patch("hitl_mcp_cli.ui.prompts.inquirer.checkbox") as mock_checkbox:
+        mock_cb_result = MagicMock()
+        mock_cb_result.execute.return_value = ["A"]
+        mock_checkbox.return_value = mock_cb_result
+
+        result = await prompt_checkbox("Pick:", ["A", "B", "C"])
+        assert result == ["A"]
+
+
+def test_display_notification_with_notes() -> None:
+    """Test notification displays notes before panel."""
+    with patch("hitl_mcp_cli.ui.prompts.console") as mock_console:
+        display_notification("Info", "Message", "info", notes="Extra context")
+        # 3 prints: notes dim line + panel + spacing
+        assert mock_console.print.call_count == 3

@@ -1,11 +1,16 @@
 """FastMCP server for interactive user input."""
 
 import asyncio
+import logging
+import time
 from typing import Any, Literal
 
 from fastmcp import FastMCP
 
+from .interaction_log import ResultType, log_interaction
 from .ui import display_notification, prompt_checkbox, prompt_confirm, prompt_path, prompt_select, prompt_text
+
+logger = logging.getLogger(__name__)
 
 mcp = FastMCP(
     name="HITL MCP Server",
@@ -24,6 +29,7 @@ async def hitl_collect(
     default: str | None = None,
     validation_pattern: str | None = None,
     validation_message: str | None = None,
+    notes: str | None = None,
 ) -> str | dict[str, str]:
     """Collect a single input value from the user. Use for text, file paths, or multiline content. Blocks until the user responds.
 
@@ -33,17 +39,53 @@ async def hitl_collect(
         default: Pre-filled value the user can accept or modify
         validation_pattern: Regex pattern to validate input (e.g., r"^[a-z0-9-]+$" for slugs)
         validation_message: Custom message shown when validation fails
+        notes: Optional freeform context displayed as a dimmed line below the message
 
     Returns:
         The user's input string
     """
+    t0 = time.monotonic()
+    result = await _collect_input(message, input_type, default, validation_pattern, validation_message, notes)
+    ms = int((time.monotonic() - t0) * 1000)
+    rt: ResultType = "cancel" if isinstance(result, dict) else "value"
+    log_interaction("hitl_collect", ms, rt)
+    return result
+
+
+@mcp.tool()
+async def hitl_ask(
+    message: str,
+    input_type: Literal["text", "path", "multiline"] = "text",
+    default: str | None = None,
+    validation_pattern: str | None = None,
+    validation_message: str | None = None,
+    notes: str | None = None,
+) -> str | dict[str, str]:
+    """Alias for hitl_collect. Collect a single input value from the user."""
+    t0 = time.monotonic()
+    result = await _collect_input(message, input_type, default, validation_pattern, validation_message, notes)
+    ms = int((time.monotonic() - t0) * 1000)
+    rt: ResultType = "cancel" if isinstance(result, dict) else "value"
+    log_interaction("hitl_ask", ms, rt)
+    return result
+
+
+async def _collect_input(
+    message: str,
+    input_type: Literal["text", "path", "multiline"] = "text",
+    default: str | None = None,
+    validation_pattern: str | None = None,
+    validation_message: str | None = None,
+    notes: str | None = None,
+) -> str | dict[str, str]:
+    """Shared implementation for hitl_collect and hitl_ask."""
     try:
         if input_type == "path":
-            result: str = await prompt_path(message, "any", False, default)
+            result: str = await prompt_path(message, "any", False, default, notes)
         elif input_type == "multiline":
-            result = await prompt_text(message, default, True, validation_pattern, validation_message)
+            result = await prompt_text(message, default, True, validation_pattern, validation_message, notes)
         else:
-            result = await prompt_text(message, default, False, validation_pattern, validation_message)
+            result = await prompt_text(message, default, False, validation_pattern, validation_message, notes)
         return result
     except KeyboardInterrupt:
         return {"action": "cancel"}
@@ -59,7 +101,8 @@ async def hitl_choose(
     multiple: bool = False,
     default: str | None = None,
     fuzzy_search: bool | None = None,
-) -> str | list[str] | dict[str, str]:
+    notes: str | None = None,
+) -> str | list[str] | dict[str, str] | dict[str, Any]:
     """Present a list of options for the user to select from. Supports single or multiple selection, fuzzy search for long lists, and rich option descriptions.
 
     Args:
@@ -69,9 +112,10 @@ async def hitl_choose(
         multiple: Enable checkbox mode for selecting multiple items
         default: Pre-selected option value
         fuzzy_search: Force fuzzy search on/off (auto-enabled for >15 items)
+        notes: Optional freeform context displayed as a dimmed line below the message
 
     Returns:
-        Selected value (string) or values (list) if multiple=True
+        Selected value (string), values (list) if multiple=True, or dict with 'selected' and 'note' keys if escape hatch triggered
     """
     if not choices and not options:
         raise Exception("At least one of 'choices' or 'options' must be provided")
@@ -90,17 +134,29 @@ async def hitl_choose(
 
     assert choices is not None  # guaranteed by validation above
 
+    t0 = time.monotonic()
     try:
         if multiple:
-            raw: list[str] = await prompt_checkbox(message, choices)
+            raw: Any = await prompt_checkbox(message, choices, notes)
+            ms = int((time.monotonic() - t0) * 1000)
+            log_interaction("hitl_choose", ms, "value")
+            if isinstance(raw, dict):
+                # Escape hatch returned dict with note
+                if display_to_value:
+                    raw["selected"] = [display_to_value.get(r, r) for r in raw["selected"]]
+                return raw
             if display_to_value:
                 return [display_to_value.get(r, r) for r in raw]
-            return raw
-        result_str: str = await prompt_select(message, choices, default)
+            return list(raw) if raw else []
+        result_str: str = await prompt_select(message, choices, default, notes)
+        ms = int((time.monotonic() - t0) * 1000)
+        log_interaction("hitl_choose", ms, "value")
         if display_to_value is not None:
             return display_to_value.get(result_str, result_str)
         return result_str
     except KeyboardInterrupt:
+        ms = int((time.monotonic() - t0) * 1000)
+        log_interaction("hitl_choose", ms, "cancel")
         return {"action": "cancel"}
     except Exception as e:
         raise Exception(f"Selection failed: {str(e)}") from e
@@ -111,26 +167,60 @@ async def hitl_confirm(
     message: str,
     default: bool = False,
     severity: Literal["low", "medium", "high"] = "medium",
-) -> dict[str, str]:
+    context: str | None = None,
+    timeout_seconds: int = 0,
+    notes: str | None = None,
+) -> dict[str, Any]:
     """Ask the user to confirm or reject an action. Use severity='high' for destructive or irreversible operations.
 
     Args:
         message: Clear yes/no question explaining the action
         default: Default answer - use False for destructive operations
         severity: "low" (default yes), "medium" (standard), "high" (red warning, requires typed "yes")
+        context: Additional context displayed in a panel above the confirm prompt
+        timeout_seconds: Seconds to wait (0 = infinite, >0 = timed confirmation)
+        notes: Optional freeform context displayed as a dimmed line below the message
 
     Returns:
-        Dict with 'action': 'accept' (confirmed), 'decline' (rejected), or 'cancel' (Ctrl+C)
+        Dict with 'action': 'accept' (confirmed), 'decline' (rejected), or 'cancel' (Ctrl+C).
+        When timeout_seconds > 0, also includes 'timed_out' (bool).
     """
+    t0 = time.monotonic()
     try:
-        if severity == "low":
-            result: bool = await prompt_confirm(message, default=True)
-        elif severity == "high":
-            result = await prompt_confirm_high(message)
-        else:
-            result = await prompt_confirm(message, default)
-        return {"action": "accept" if result else "decline"}
+        if context:
+            display_notification("Context", context, "info")
+
+        async def _do_confirm() -> bool:
+            if severity == "low":
+                result = await prompt_confirm(message, default=True, notes=notes)
+                return bool(result)
+            elif severity == "high":
+                result = await prompt_confirm_high(message)
+                return bool(result)
+            else:
+                result = await prompt_confirm(message, default, notes=notes)
+                return bool(result)
+
+        if timeout_seconds > 0:
+            try:
+                confirmed = await asyncio.wait_for(_do_confirm(), timeout=timeout_seconds)
+                ms = int((time.monotonic() - t0) * 1000)
+                log_interaction("hitl_confirm", ms, "value")
+                return {"action": "accept" if confirmed else "decline", "timed_out": False}
+            except TimeoutError:
+                ms = int((time.monotonic() - t0) * 1000)
+                log_interaction("hitl_confirm", ms, "timeout")
+                return {"action": "decline", "timed_out": True}
+
+        confirmed = await _do_confirm()
+        ms = int((time.monotonic() - t0) * 1000)
+        log_interaction("hitl_confirm", ms, "value")
+        return {"action": "accept" if confirmed else "decline"}
     except KeyboardInterrupt:
+        ms = int((time.monotonic() - t0) * 1000)
+        log_interaction("hitl_confirm", ms, "cancel")
+        if timeout_seconds > 0:
+            return {"action": "cancel", "timed_out": False}
         return {"action": "cancel"}
     except Exception as e:
         raise Exception(f"Confirmation failed: {str(e)}") from e
@@ -141,6 +231,7 @@ async def hitl_notify(
     message: str,
     level: Literal["success", "info", "warning", "error"] = "info",
     title: str | None = None,
+    notes: str | None = None,
 ) -> dict[str, bool]:
     """Display a styled notification to the user. Non-blocking — does not wait for user input. Use for progress updates, completion notices, and status changes.
 
@@ -148,64 +239,19 @@ async def hitl_notify(
         message: Detailed message (supports multi-line with newlines)
         level: "success" (green), "info" (blue), "warning" (yellow), "error" (red)
         title: Optional short title for the notification
+        notes: Optional freeform context displayed as a dimmed line below the notification
 
     Returns:
         Dict with 'acknowledged' key (always True)
     """
+    t0 = time.monotonic()
     try:
-        display_notification(title or level.capitalize(), message, level)
+        display_notification(title or level.capitalize(), message, level, notes)
+        ms = int((time.monotonic() - t0) * 1000)
+        log_interaction("hitl_notify", ms, "value")
         return {"acknowledged": True}
     except Exception as e:
         raise Exception(f"Notification display failed: {str(e)}") from e
-
-
-@mcp.tool()
-async def hitl_approve_workflow(
-    message: str,
-    context: str | None = None,
-    options: list[str] | None = None,
-    timeout_seconds: int = 300,
-    severity: Literal["low", "medium", "high"] = "high",
-) -> dict[str, Any]:
-    """Request explicit human approval before proceeding with a significant workflow step. Blocks until approved, rejected, or timed out. Use for deploying to production, deleting data, sending external communications, or any irreversible action.
-
-    Args:
-        message: What needs approval
-        context: Additional details to display
-        options: Choices (default: ["Approve", "Reject"])
-        timeout_seconds: Seconds to wait (0 = infinite, default 300)
-        severity: Visual severity level
-
-    Returns:
-        Dict with 'approved' (bool), 'choice' (str), 'timed_out' (bool)
-    """
-    effective_options = options or ["Approve", "Reject"]
-
-    try:
-        # Display context if provided
-        if context:
-            display_notification("Approval Required", f"{message}\n\n{context}", "warning")
-        else:
-            display_notification("Approval Required", message, "warning")
-
-        # Use select for the approval choice, with optional timeout
-        if timeout_seconds > 0:
-            try:
-                choice: str = await asyncio.wait_for(
-                    prompt_select(message, effective_options, None),
-                    timeout=timeout_seconds,
-                )
-            except TimeoutError:
-                return {"approved": False, "choice": "", "timed_out": True}
-        else:
-            choice = await prompt_select(message, effective_options, None)
-
-        approved = choice == effective_options[0]
-        return {"approved": approved, "choice": choice, "timed_out": False}
-    except KeyboardInterrupt:
-        return {"approved": False, "choice": "", "timed_out": False, "action": "cancel"}
-    except Exception as e:
-        raise Exception(f"Approval workflow failed: {str(e)}") from e
 
 
 async def prompt_confirm_high(message: str) -> bool:

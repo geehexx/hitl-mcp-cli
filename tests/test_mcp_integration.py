@@ -46,10 +46,10 @@ class TestMCPProtocol:
         tool_names = {tool.name for tool in tools}
         assert tool_names == {
             "hitl_collect",
+            "hitl_ask",
             "hitl_choose",
             "hitl_confirm",
             "hitl_notify",
-            "hitl_approve_workflow",
         }
 
         # Verify each tool has required fields
@@ -77,7 +77,7 @@ class TestToolExecution:
             assert result is not None
             assert result.data == "User Response"
             assert not result.is_error
-            mock_prompt.assert_called_once_with("Enter text:", "default", False, None, None)
+            mock_prompt.assert_called_once_with("Enter text:", "default", False, None, None, None)
 
     @pytest.mark.asyncio
     async def test_hitl_collect_multiline(self, mcp_client: Client) -> None:
@@ -93,7 +93,7 @@ class TestToolExecution:
             assert result is not None
             assert result.data == "line1\nline2"
             assert not result.is_error
-            mock_prompt.assert_called_once_with("Enter text:", None, True, None, None)
+            mock_prompt.assert_called_once_with("Enter text:", None, True, None, None, None)
 
     @pytest.mark.asyncio
     async def test_hitl_collect_path(self, mcp_client: Client) -> None:
@@ -265,7 +265,7 @@ class TestToolExecution:
             assert result is not None
             assert result.data == {"action": "accept"}
             # severity=low should pass default=True
-            mock_confirm.assert_called_once_with("Continue?", default=True)
+            mock_confirm.assert_called_once_with("Continue?", default=True, notes=None)
 
     @pytest.mark.asyncio
     async def test_hitl_notify_execution(self, mcp_client: Client) -> None:
@@ -279,7 +279,7 @@ class TestToolExecution:
             assert result is not None
             assert result.data == {"acknowledged": True}
             assert not result.is_error
-            mock_notify.assert_called_once_with("Success", "Operation complete", "success")
+            mock_notify.assert_called_once_with("Success", "Operation complete", "success", None)
 
     @pytest.mark.asyncio
     async def test_hitl_notify_default_title(self, mcp_client: Client) -> None:
@@ -292,87 +292,98 @@ class TestToolExecution:
 
             assert result is not None
             assert result.data == {"acknowledged": True}
-            mock_notify.assert_called_once_with("Info", "Something happened", "info")
+            mock_notify.assert_called_once_with("Info", "Something happened", "info", None)
 
     @pytest.mark.asyncio
-    async def test_hitl_approve_workflow_approved(self, mcp_client: Client) -> None:
-        """Test hitl_approve_workflow returns approved."""
+    async def test_hitl_confirm_with_context(self, mcp_client: Client) -> None:
+        """Test hitl_confirm displays context before prompt."""
         with (
-            patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock_select,
-            patch("hitl_mcp_cli.server.display_notification"),
-        ):
-            mock_select.return_value = "Approve"
-
-            result = await mcp_client.call_tool(
-                "hitl_approve_workflow",
-                {"message": "Deploy to production?", "timeout_seconds": 0},
-            )
-
-            assert result is not None
-            assert result.data == {"approved": True, "choice": "Approve", "timed_out": False}
-
-    @pytest.mark.asyncio
-    async def test_hitl_approve_workflow_rejected(self, mcp_client: Client) -> None:
-        """Test hitl_approve_workflow returns rejected."""
-        with (
-            patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock_select,
-            patch("hitl_mcp_cli.server.display_notification"),
-        ):
-            mock_select.return_value = "Reject"
-
-            result = await mcp_client.call_tool(
-                "hitl_approve_workflow",
-                {"message": "Deploy to production?", "timeout_seconds": 0},
-            )
-
-            assert result is not None
-            assert result.data == {"approved": False, "choice": "Reject", "timed_out": False}
-
-    @pytest.mark.asyncio
-    async def test_hitl_approve_workflow_with_context(self, mcp_client: Client) -> None:
-        """Test hitl_approve_workflow displays context."""
-        with (
-            patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock_select,
+            patch("hitl_mcp_cli.server.prompt_confirm", new_callable=AsyncMock) as mock_confirm,
             patch("hitl_mcp_cli.server.display_notification") as mock_notify,
         ):
-            mock_select.return_value = "Approve"
+            mock_confirm.return_value = True
 
             result = await mcp_client.call_tool(
-                "hitl_approve_workflow",
+                "hitl_confirm",
                 {
-                    "message": "Deploy?",
+                    "message": "Deploy to production?",
                     "context": "Version 2.0 to production",
                     "timeout_seconds": 0,
                 },
             )
 
             assert result is not None
-            assert result.data["approved"] is True
+            assert result.data == {"action": "accept"}
             # Should display context in notification
             call_args = mock_notify.call_args[0]
             assert "Version 2.0" in call_args[1]
 
     @pytest.mark.asyncio
-    async def test_hitl_approve_workflow_custom_options(self, mcp_client: Client) -> None:
-        """Test hitl_approve_workflow with custom options."""
+    async def test_hitl_confirm_declined(self, mcp_client: Client) -> None:
+        """Test hitl_confirm returns decline."""
         with (
-            patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock_select,
+            patch("hitl_mcp_cli.server.prompt_confirm", new_callable=AsyncMock) as mock_confirm,
             patch("hitl_mcp_cli.server.display_notification"),
         ):
-            mock_select.return_value = "Deploy Now"
+            mock_confirm.return_value = False
 
             result = await mcp_client.call_tool(
-                "hitl_approve_workflow",
+                "hitl_confirm",
+                {"message": "Deploy to production?", "context": "Risky deploy", "timeout_seconds": 0},
+            )
+
+            assert result is not None
+            assert result.data == {"action": "decline"}
+
+    @pytest.mark.asyncio
+    async def test_hitl_ask_execution(self, mcp_client: Client) -> None:
+        """Test hitl_ask alias delegates to hitl_collect."""
+        with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock_prompt:
+            mock_prompt.return_value = "Ask Response"
+
+            result = await mcp_client.call_tool(
+                "hitl_ask",
+                {"message": "What is your name?"},
+            )
+
+            assert result is not None
+            assert result.data == "Ask Response"
+            mock_prompt.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_hitl_confirm_with_timeout(self, mcp_client: Client) -> None:
+        """Test hitl_confirm with timeout returns timed_out field."""
+        with patch("hitl_mcp_cli.server.prompt_confirm", new_callable=AsyncMock) as mock_confirm:
+            mock_confirm.return_value = True
+
+            result = await mcp_client.call_tool(
+                "hitl_confirm",
                 {
-                    "message": "When to deploy?",
-                    "options": ["Deploy Now", "Schedule Later", "Cancel"],
-                    "timeout_seconds": 0,
+                    "message": "Deploy?",
+                    "timeout_seconds": 30,
                 },
             )
 
             assert result is not None
-            assert result.data["approved"] is True
-            assert result.data["choice"] == "Deploy Now"
+            assert result.data["action"] == "accept"
+            assert result.data["timed_out"] is False
+
+    @pytest.mark.asyncio
+    async def test_hitl_ask_with_path_type(self, mcp_client: Client) -> None:
+        """Test hitl_ask with path input type."""
+        with patch("hitl_mcp_cli.server.prompt_path", new_callable=AsyncMock) as mock_path:
+            mock_path.return_value = "/home/user/file.txt"
+
+            result = await mcp_client.call_tool(
+                "hitl_ask",
+                {
+                    "message": "Select file:",
+                    "input_type": "path",
+                },
+            )
+
+            assert result is not None
+            assert result.data == "/home/user/file.txt"
 
 
 class TestErrorHandling:
@@ -435,7 +446,7 @@ class TestParameterHandling:
 
             assert result is not None
             assert not result.is_error
-            mock_prompt.assert_called_once_with("Enter text:", None, False, None, None)
+            mock_prompt.assert_called_once_with("Enter text:", None, False, None, None, None)
 
     @pytest.mark.asyncio
     async def test_all_parameters_provided(self, mcp_client: Client) -> None:
@@ -455,7 +466,7 @@ class TestParameterHandling:
 
             assert result is not None
             assert not result.is_error
-            mock_prompt.assert_called_once_with("Enter text:", "default value", True, r"^\w+$", None)
+            mock_prompt.assert_called_once_with("Enter text:", "default value", True, r"^\w+$", None, None)
 
     @pytest.mark.asyncio
     async def test_notification_level_values(self, mcp_client: Client) -> None:

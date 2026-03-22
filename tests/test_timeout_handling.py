@@ -154,42 +154,39 @@ async def test_error_recovery_after_failure(mcp_client: Client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_hitl_approve_workflow_timeout(mcp_client: Client) -> None:
-    """Test approve_workflow returns timed_out when prompt exceeds timeout."""
-    with patch("hitl_mcp_cli.server.display_notification"):
-        with patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock:
+async def test_hitl_confirm_timeout(mcp_client: Client) -> None:
+    """Test hitl_confirm returns timed_out when prompt exceeds timeout."""
+    with patch("hitl_mcp_cli.server.prompt_confirm", new_callable=AsyncMock) as mock:
 
-            async def slow_prompt(*args: object, **kwargs: object) -> str:
-                await asyncio.sleep(2)
-                return "Approve"
+        async def slow_prompt(*args: object, **kwargs: object) -> bool:
+            await asyncio.sleep(2)
+            return True
 
-            mock.side_effect = slow_prompt
+        mock.side_effect = slow_prompt
 
-            result = await mcp_client.call_tool(
-                "hitl_approve_workflow",
-                {"message": "Deploy?", "timeout_seconds": 1},
-            )
+        result = await mcp_client.call_tool(
+            "hitl_confirm",
+            {"message": "Deploy?", "timeout_seconds": 1},
+        )
 
-            assert result is not None
-            assert result.data == {"approved": False, "choice": "", "timed_out": True}
+        assert result is not None
+        assert result.data == {"action": "decline", "timed_out": True}
 
 
 @pytest.mark.asyncio
-async def test_hitl_approve_workflow_keyboard_interrupt(mcp_client: Client) -> None:
-    """Test approve_workflow returns cancel on KeyboardInterrupt."""
-    with patch("hitl_mcp_cli.server.display_notification"):
-        with patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock:
-            mock.side_effect = KeyboardInterrupt()
+async def test_hitl_confirm_timeout_keyboard_interrupt(mcp_client: Client) -> None:
+    """Test hitl_confirm with timeout returns cancel on KeyboardInterrupt."""
+    with patch("hitl_mcp_cli.server.prompt_confirm", new_callable=AsyncMock) as mock:
+        mock.side_effect = KeyboardInterrupt()
 
-            result = await mcp_client.call_tool(
-                "hitl_approve_workflow",
-                {"message": "Deploy?", "timeout_seconds": 0},
-            )
+        result = await mcp_client.call_tool(
+            "hitl_confirm",
+            {"message": "Deploy?", "timeout_seconds": 30},
+        )
 
-            assert result is not None
-            assert result.data["action"] == "cancel"
-            assert result.data["approved"] is False
-            assert result.data["timed_out"] is False
+        assert result is not None
+        assert result.data["action"] == "cancel"
+        assert result.data["timed_out"] is False
 
 
 @pytest.mark.asyncio

@@ -11,6 +11,7 @@ from InquirerPy import inquirer
 from InquirerPy.validator import PathValidator
 from rich.console import Console
 from rich.markdown import Markdown
+from rich.markup import escape
 from rich.panel import Panel
 from rich.rule import Rule
 from rich.text import Text
@@ -24,16 +25,16 @@ console = Console()
 # Future: Replace with request-scoped state or context manager.
 _needs_separator = False
 
-# Icons for different prompt types
+# Icons for different prompt types (no trailing spaces — formatting adds spacing)
 ICONS = {
-    "text": "✏️ ",
+    "text": "✏️",
     "select": "🎯",
-    "checkbox": "☑️ ",
+    "checkbox": "☑️",
     "confirm": "❓",
     "path": "📁",
     "success": "✅",
-    "info": "ℹ️ ",
-    "warning": "⚠️ ",
+    "info": "ℹ️",
+    "warning": "⚠️",
     "error": "❌",
 }
 
@@ -48,6 +49,12 @@ def sync_to_async(func: Callable[..., Any]) -> Callable[..., Any]:
     return wrapper
 
 
+def _render_notes(notes: str | None) -> None:
+    """Display optional notes line in dim style."""
+    if notes:
+        console.print(f"[dim]{escape(notes)}[/dim]")
+
+
 @sync_to_async
 def prompt_text(
     prompt: str,
@@ -55,6 +62,7 @@ def prompt_text(
     multiline: bool = False,
     validate_pattern: str | None = None,
     invalid_message: str | None = None,
+    notes: str | None = None,
 ) -> str:
     """Prompt for text input."""
     global _needs_separator
@@ -72,26 +80,30 @@ def prompt_text(
         console.print(Rule(style="dim"))
         _needs_separator = False
 
-    # Render markdown if present
+    # Pre-render question with Rich (handles emoji width correctly),
+    # then use empty message for InquirerPy (avoids emoji width miscalculation)
     if _has_markdown(prompt):
         _render_markdown_prompt(prompt, ICONS["text"])
-        formatted_prompt = ""
     else:
-        formatted_prompt = f"{ICONS['text']} {prompt}"
+        _render_inline_prompt(prompt, ICONS["text"])
+
+    _render_notes(notes)
+
+    # Build default/placeholder hint for long_instruction
+    long_instruction = ""
+    if default and not multiline:
+        long_instruction = f"(default: {default})"
 
     if multiline:
-        if not _has_markdown(prompt):
-            panel_text = Text()
-            panel_text.append(ICONS["text"], style="bold cyan")
-            panel_text.append(prompt, style="bold cyan")
-            panel_text.append("\n(Press Esc+Enter to submit)", style="dim italic")
-            console.print(Panel(panel_text, border_style="cyan", padding=(1, 2)))
-        else:
+        if _has_markdown(prompt):
             console.print(Text("(Press Esc+Enter to submit)", style="dim italic"))
+        else:
+            console.print(Text("  (Press Esc+Enter to submit)", style="dim italic"))
 
         try:
             result: str = inquirer.text(  # type: ignore[attr-defined]
                 message="",
+                qmark="",
                 default=default or "",
                 multiline=True,
                 validate=validator,
@@ -101,23 +113,29 @@ def prompt_text(
             ).execute()
         except KeyboardInterrupt:
             raise
-        # Print newline to prevent terminal clearing
-        console.print()
     else:
+        # Placeholder behavior: show default in long_instruction, start with empty buffer.
+        # If user submits empty, return the default value.
         result = inquirer.text(  # type: ignore[attr-defined]
-            message=formatted_prompt,
-            default=default or "",
+            message="",
+            qmark="",
+            default="",
+            long_instruction=long_instruction,
             validate=validator,
             invalid_message=invalid_message or "Invalid input",
             raise_keyboard_interrupt=True,
         ).execute()
+        if not result and default:
+            result = default
 
     _needs_separator = True
     return result
 
 
 @sync_to_async
-def prompt_select(prompt: str, choices: list[str], default: str | None = None) -> str:
+def prompt_select(
+    prompt: str, choices: list[str], default: str | None = None, notes: str | None = None
+) -> str:
     """Prompt for single selection."""
     global _needs_separator
 
@@ -127,14 +145,16 @@ def prompt_select(prompt: str, choices: list[str], default: str | None = None) -
 
     if _has_markdown(prompt):
         _render_markdown_prompt(prompt, ICONS["select"])
-        formatted_prompt = ""
     else:
-        formatted_prompt = f"{ICONS['select']} {prompt}"
+        _render_inline_prompt(prompt, ICONS["select"])
+
+    _render_notes(notes)
 
     # Use fuzzy search for long lists (>15 items)
     if len(choices) > 15:
         result: str = inquirer.fuzzy(  # type: ignore[attr-defined]
-            message=formatted_prompt,
+            message="",
+            qmark="",
             choices=choices,
             default=default or "",
             max_height="70%",
@@ -142,7 +162,8 @@ def prompt_select(prompt: str, choices: list[str], default: str | None = None) -
         ).execute()
     else:
         result = inquirer.select(  # type: ignore[attr-defined]
-            message=formatted_prompt,
+            message="",
+            qmark="",
             choices=choices,
             default=default,
             max_height="70%",
@@ -153,8 +174,13 @@ def prompt_select(prompt: str, choices: list[str], default: str | None = None) -
 
 
 @sync_to_async
-def prompt_checkbox(prompt: str, choices: list[str]) -> list[str]:
-    """Prompt for multiple selections."""
+def prompt_checkbox(prompt: str, choices: list[str], notes: str | None = None) -> list[str] | dict[str, Any]:
+    """Prompt for multiple selections.
+
+    Escape hatch: if ALL or NONE selected, offers optional free-text note.
+    Returns dict with 'selected' and 'note' keys when note provided,
+    otherwise returns plain list.
+    """
     global _needs_separator
 
     if _needs_separator:
@@ -163,24 +189,39 @@ def prompt_checkbox(prompt: str, choices: list[str]) -> list[str]:
 
     if _has_markdown(prompt):
         _render_markdown_prompt(prompt, ICONS["checkbox"])
-        formatted_prompt = ""
     else:
-        formatted_prompt = f"{ICONS['checkbox']} {prompt}"
+        _render_inline_prompt(prompt, ICONS["checkbox"])
+
+    _render_notes(notes)
 
     result: list[str] = inquirer.checkbox(  # type: ignore[attr-defined]
-        message=formatted_prompt,
+        message="",
+        qmark="",
         choices=choices,
         show_cursor=True,
         max_height="70%",
         instruction="(Space to select, Enter to confirm)",
         raise_keyboard_interrupt=True,
     ).execute()
+
+    # Escape hatch: all or none selected
+    if len(result) == len(choices) or len(result) == 0:
+        note_text: str = inquirer.text(  # type: ignore[attr-defined]
+            message="Add a note? (optional, press Enter to skip)",
+            qmark="",
+            default="",
+            raise_keyboard_interrupt=True,
+        ).execute()
+        if note_text.strip():
+            _needs_separator = True
+            return {"selected": result, "note": note_text.strip()}
+
     _needs_separator = True
     return result
 
 
 @sync_to_async
-def prompt_confirm(prompt: str, default: bool = False) -> bool:
+def prompt_confirm(prompt: str, default: bool = False, notes: str | None = None) -> bool:
     """Prompt for yes/no confirmation."""
     global _needs_separator
 
@@ -190,12 +231,14 @@ def prompt_confirm(prompt: str, default: bool = False) -> bool:
 
     if _has_markdown(prompt):
         _render_markdown_prompt(prompt, ICONS["confirm"])
-        formatted_prompt = ""
     else:
-        formatted_prompt = f"{ICONS['confirm']} {prompt}"
+        _render_inline_prompt(prompt, ICONS["confirm"])
+
+    _render_notes(notes)
 
     result: bool = inquirer.confirm(  # type: ignore[attr-defined]
-        message=formatted_prompt,
+        message="",
+        qmark="",
         default=default,
         raise_keyboard_interrupt=True,
     ).execute()
@@ -205,7 +248,11 @@ def prompt_confirm(prompt: str, default: bool = False) -> bool:
 
 @sync_to_async
 def prompt_path(
-    prompt: str, path_type: str = "any", must_exist: bool = False, default: str | None = None
+    prompt: str,
+    path_type: str = "any",
+    must_exist: bool = False,
+    default: str | None = None,
+    notes: str | None = None,
 ) -> str:
     """Prompt for file/directory path."""
     global _needs_separator
@@ -225,12 +272,14 @@ def prompt_path(
 
     if _has_markdown(prompt):
         _render_markdown_prompt(prompt, ICONS["path"])
-        formatted_prompt = ""
     else:
-        formatted_prompt = f"{ICONS['path']} {prompt}"
+        _render_inline_prompt(prompt, ICONS["path"])
+
+    _render_notes(notes)
 
     result = inquirer.filepath(  # type: ignore[attr-defined]
-        message=formatted_prompt,
+        message="",
+        qmark="",
         default=default or "",
         validate=validator,
         raise_keyboard_interrupt=True,
@@ -239,7 +288,9 @@ def prompt_path(
     return str(Path(result).expanduser().resolve())
 
 
-def display_notification(title: str, message: str, notification_type: str = "info") -> None:
+def display_notification(
+    title: str, message: str, notification_type: str = "info", notes: str | None = None
+) -> None:
     """Display formatted notification panel."""
     global _needs_separator
 
@@ -250,12 +301,21 @@ def display_notification(title: str, message: str, notification_type: str = "inf
     # Create rich text for title with icon
     title_text = Text()
     title_text.append(icon, style=f"bold {color}")
-    title_text.append(title, style=f"bold {color}")
+    title_text.append(escape(title), style=f"bold {color}")
 
-    panel = Panel(message, title=title_text, border_style=color, padding=(1, 2))
+    panel = Panel(escape(message), title=title_text, border_style=color, padding=(1, 2))
+    _render_notes(notes)
     console.print(panel)
     console.print()  # Add spacing after notification
     _needs_separator = True
+
+
+def _render_inline_prompt(prompt: str, icon: str) -> None:
+    """Render a non-markdown prompt with Rich (handles emoji width correctly)."""
+    text = Text()
+    text.append(f"{icon} ", style="bold cyan")
+    text.append(prompt, style="bold cyan")
+    console.print(text)
 
 
 def _has_markdown(text: str) -> bool:

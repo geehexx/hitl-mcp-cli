@@ -33,7 +33,9 @@ async def test_hitl_choose_short_list(mcp_client: Client) -> None:
 
         assert result is not None
         assert result.data == "Option B"
-        mock.assert_called_once_with("Choose an option:", ["Option A", "Option B", "Option C"], "Option A")
+        mock.assert_called_once_with(
+            "Choose an option:", ["Option A", "Option B", "Option C"], "Option A", None
+        )
 
 
 @pytest.mark.asyncio
@@ -55,7 +57,7 @@ async def test_hitl_choose_long_list(mcp_client: Client) -> None:
 
         assert result is not None
         assert result.data == "Option 10"
-        mock.assert_called_once_with("Choose from many options:", long_choices, None)
+        mock.assert_called_once_with("Choose from many options:", long_choices, None, None)
 
 
 @pytest.mark.asyncio
@@ -75,7 +77,7 @@ async def test_hitl_choose_multiple(mcp_client: Client) -> None:
 
         assert result is not None
         assert result.data == ["Option A", "Option C"]
-        mock.assert_called_once_with("Choose multiple:", ["Option A", "Option B", "Option C"])
+        mock.assert_called_once_with("Choose multiple:", ["Option A", "Option B", "Option C"], None)
 
 
 @pytest.mark.asyncio
