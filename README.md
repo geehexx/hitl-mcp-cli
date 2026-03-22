@@ -59,12 +59,13 @@ HITL MCP CLI provides a **standardized, elegant interface** for AI agents to req
 
 ## ✨ Features
 
-- **🎯 5 Interactive Tools**: Collect input, choose from options, confirm actions, notifications, and workflow approval
+- **🎯 5 Interactive Tools**: Collect input, ask questions, choose from options, confirm actions, and send notifications
 - **🎨 Beautiful Terminal UI**: Icons, gradients, and smooth animations
 - **🚀 Instant Setup**: Works with `uvx` — no installation required
 - **🔌 MCP Standard**: Seamless integration with any MCP-compatible AI agent
 - **⚡ Lightning Fast**: Async-first design with minimal overhead
 - **🛡️ Type-Safe**: Full type hints for reliability and IDE support
+- **📊 Interaction Logging**: All tool calls logged to `~/.local/state/hitl-mcp/interactions.jsonl`
 - **🌈 Visual Feedback**: Loading indicators and status messages
 - **🔧 Customizable**: Disable animations, customize host/port
 
@@ -88,9 +89,6 @@ uvx hitl-mcp-cli
 
 # Or install globally
 uv tool install hitl-mcp-cli
-
-# Or use pip
-pip install hitl-mcp-cli
 ```
 
 ### Start the Server
@@ -182,10 +180,17 @@ description = await hitl_collect(
 - `default` (str, optional): Pre-filled value
 - `validation_pattern` (str, optional): Regex pattern for validation
 - `validation_message` (str, optional): Custom validation error message
+- `notes` (str, optional): Freeform context displayed as a dimmed line below the message
 
 ---
 
-### 2. `hitl_choose` — Present Choices
+### 2. `hitl_ask` — Ask a Question
+
+Alias for `hitl_collect`. Use whichever name reads more naturally in your agent's workflow.
+
+---
+
+### 3. `hitl_choose` — Present Choices
 
 Present a list of options for the user to select from. Supports single or multiple selection, fuzzy search for long lists, and rich option descriptions.
 
@@ -227,10 +232,13 @@ features = await hitl_choose(
 - `multiple` (bool): Enable checkbox mode (default: False)
 - `default` (str, optional): Pre-selected option
 - `fuzzy_search` (bool, optional): Force fuzzy search on/off (auto for >15 items)
+- `notes` (str, optional): Freeform context displayed as a dimmed line below the message
+
+> **Escape hatch**: In multiple-selection mode, if the user selects all or none of the options, they are offered a free-text input to explain their intent.
 
 ---
 
-### 3. `hitl_confirm` — Get Confirmation
+### 4. `hitl_confirm` — Get Confirmation
 
 Ask the user to confirm or reject an action. Use severity='high' for destructive operations.
 
@@ -242,32 +250,43 @@ Ask the user to confirm or reject an action. Use severity='high' for destructive
 **Example**:
 ```python
 # Standard confirmation
-confirmed = await hitl_confirm(
+result = await hitl_confirm(
     message="I will delete 50 unused dependencies. Proceed?",
     default=False
 )
+if result["action"] == "accept":
+    ...
 
 # High severity — requires typed "yes"
-confirmed = await hitl_confirm(
+result = await hitl_confirm(
     message="Delete production database?",
-    severity="high"
+    severity="high",
+    context="This will affect 10,000 active users.\nDowntime: ~30 seconds."
 )
 
-# Low severity — defaults to yes
-confirmed = await hitl_confirm(
-    message="Continue with default settings?",
-    severity="low"
+# Timed confirmation
+result = await hitl_confirm(
+    message="Deploy to production?",
+    severity="high",
+    timeout_seconds=300
 )
+if result.get("timed_out"):
+    print("Approval timed out")
 ```
 
 **Parameters**:
 - `message` (str): Yes/no question
 - `default` (bool): Default answer (default: False)
 - `severity` (Literal["low", "medium", "high"]): Confirmation intensity (default: "medium")
+- `context` (str, optional): Additional context displayed in a panel above the prompt
+- `timeout_seconds` (int): Seconds to wait, 0 = infinite (default: 0)
+- `notes` (str, optional): Freeform context displayed as a dimmed line below the message
+
+**Returns**: `{"action": "accept"|"decline"|"cancel"}`. When `timeout_seconds > 0`, also includes `"timed_out": bool`.
 
 ---
 
-### 4. `hitl_notify` — Display Notifications
+### 5. `hitl_notify` — Display Notifications
 
 Display a styled notification to the user. Non-blocking — does not wait for input.
 
@@ -295,44 +314,7 @@ await hitl_notify(
 - `message` (str): Detailed message (supports multi-line)
 - `level` (Literal["success", "info", "warning", "error"]): Visual style (default: "info")
 - `title` (str, optional): Notification title
-
----
-
-### 5. `hitl_approve_workflow` — Workflow Approval
-
-Request explicit human approval before proceeding with a significant workflow step. Blocks until approved, rejected, or timed out.
-
-**When to use**:
-- Deploying to production
-- Deleting data or resources
-- Sending external communications
-- Any irreversible action
-
-**Example**:
-```python
-result = await hitl_approve_workflow(
-    message="Deploy v2.0 to production?",
-    context="This will affect 10,000 active users.\nDowntime: ~30 seconds.",
-    severity="high",
-    timeout_seconds=300
-)
-
-if result["approved"]:
-    await deploy_to_production()
-elif result["timed_out"]:
-    await hitl_notify(message="Approval timed out", level="warning")
-else:
-    await hitl_notify(message="Deployment cancelled", level="info")
-```
-
-**Parameters**:
-- `message` (str): What needs approval
-- `context` (str, optional): Additional details to display
-- `options` (list[str]): Choices (default: ["Approve", "Reject"])
-- `timeout_seconds` (int): Seconds to wait, 0 = infinite (default: 300)
-- `severity` (Literal["low", "medium", "high"]): Visual severity (default: "high")
-
-**Returns**: `{"approved": bool, "choice": str, "timed_out": bool}`
+- `notes` (str, optional): Freeform context displayed as a dimmed line below the notification
 
 ---
 
@@ -360,12 +342,12 @@ Request approval before significant actions:
 
 ```python
 files_to_delete = find_unused_files()
-confirmed = await hitl_confirm(
+result = await hitl_confirm(
     message=f"I found {len(files_to_delete)} unused files. Delete them?",
     default=False
 )
 
-if confirmed:
+if result["action"] == "accept":
     delete_files(files_to_delete)
     await hitl_notify(
         message=f"Deleted {len(files_to_delete)} unused files",
@@ -424,12 +406,12 @@ if action == "Deploy":
     )
 
     if env == "Production":
-        result = await hitl_approve_workflow(
+        result = await hitl_confirm(
             message="Deploy to PRODUCTION?",
             context="This will affect live users.",
             severity="high"
         )
-        if result["approved"]:
+        if result["action"] == "accept":
             await deploy_to_production()
 ```
 
@@ -636,6 +618,8 @@ except Exception as e:
         print(f"Unexpected error: {e}")
         raise
 ```
+
+> **Note**: `hitl_collect` and `hitl_confirm` return `{"action": "cancel"}` on Ctrl+C instead of raising, so check the return value first.
 
 **Error Categories**:
 - **User Cancellation** (Ctrl+C): Respect the cancellation, don't retry

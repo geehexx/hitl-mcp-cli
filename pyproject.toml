@@ -17,6 +17,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
@@ -28,6 +29,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+tui = [
+    "textual>=0.89.0",
+]
+tmux = [
+    "libtmux>=0.37,<1.0",
+]
 dev = [
     "pytest>=8.4",
     "pytest-asyncio>=1.2",
@@ -39,6 +46,8 @@ dev = [
     "pre-commit>=3.5",
     "bandit[toml]>=1.7",
     "interrogate>=1.7",
+    "textual>=0.89.0",
+    "libtmux>=0.37,<1.0",
 ]
 
 [project.scripts]

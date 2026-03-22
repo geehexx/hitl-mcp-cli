@@ -5,23 +5,6 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.0] - 2026-03-22
-
-### Changed
-- Renamed tools to `hitl_*` taxonomy: `hitl_collect`, `hitl_choose`, `hitl_confirm`, `hitl_notify`
-- Merged `request_text_input` and `request_path_input` into `hitl_collect` (use `input_type` param)
-- Added `severity` parameter to `hitl_confirm` (low/medium/high)
-- Added `options` dict format to `hitl_choose` for rich option descriptions
-
-### Added
-- New `hitl_approve_workflow` tool for synchronous workflow approval with timeout
-
-### Removed
-- Plugin framework references from README and roadmap
-
-### Fixed
-- Enable `stateless_http=True` for streamable-http transport (fixes ClientDisconnect errors with Kiro CLI and other stateless MCP clients)
-
 ## [0.6.0] - 2026-03-22
 
 ### Fixed
@@ -44,24 +27,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - Rich markup escape on all user-controlled display strings
 
-## [Unreleased]
-
-### Added
-- **NEW**: Fuzzy search for long choice lists (>15 items) in select/checkbox prompts
-- **NEW**: Comprehensive accessibility documentation (docs/ACCESSIBILITY.md)
-- **NEW**: Accessibility section in README with feature highlights
-- **NEW**: Color blindness compatibility verification and documentation
-- **NEW**: `max_height="70%"` for select/checkbox prompts to prevent overwhelming display
+## [0.5.0] - 2026-03-22
 
 ### Changed
-- **IMPROVED**: Selection prompts automatically enable fuzzy filtering when choices exceed 15 items
-- **IMPROVED**: Better UX for long choice lists with search and height constraints
+- Renamed tools to `hitl_*` taxonomy: `hitl_collect`, `hitl_choose`, `hitl_confirm`, `hitl_notify`
+- Merged `request_text_input` and `request_path_input` into `hitl_collect` (use `input_type` param)
+- Added `severity` parameter to `hitl_confirm` (low/medium/high)
+- Added `options` dict format to `hitl_choose` for rich option descriptions
+- Selection prompts automatically enable fuzzy filtering when choices exceed 15 items
+- Better UX for long choice lists with search and height constraints
 
-### Documentation
-- Added docs/ACCESSIBILITY.md covering keyboard navigation, color blindness support, screen reader compatibility
-- Added accessibility testing methodology and roadmap
-- Added accessibility best practices for users with diverse needs
-- Updated README with accessibility section and link to detailed documentation
+### Added
+- Fuzzy search for long choice lists (>15 items) in select/checkbox prompts
+- Comprehensive accessibility documentation (docs/ACCESSIBILITY.md)
+- Accessibility section in README with feature highlights
+- Color blindness compatibility verification and documentation
+- `max_height="70%"` for select/checkbox prompts to prevent overwhelming display
+
+### Removed
+- Plugin framework references from README and roadmap
+
+### Fixed
+- Enable `stateless_http=True` for streamable-http transport (fixes ClientDisconnect errors with Kiro CLI and other stateless MCP clients)
 
 ## [0.4.0] - 2025-01-10
 

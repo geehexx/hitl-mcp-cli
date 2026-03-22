@@ -17,11 +17,10 @@ HITL MCP CLI is built as a layered architecture that separates concerns between 
 │                      FastMCP Server Layer                    │
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │  Tool Registry & Schema Generation                   │   │
-│  │  - request_text_input                                │   │
-│  │  - request_selection                                 │   │
-│  │  - request_confirmation                              │   │
-│  │  - request_path_input                                │   │
-│  │  - notify_completion                                 │   │
+│  │  - hitl_collect / hitl_ask                           │   │
+│  │  - hitl_choose                                       │   │
+│  │  - hitl_confirm                                      │   │
+│  │  - hitl_notify                                       │   │
 │  └──────────────────────────────────────────────────────┘   │
 └────────────────────────────┬────────────────────────────────┘
                              │ Async Function Calls
@@ -63,7 +62,7 @@ HITL MCP CLI is built as a layered architecture that separates concerns between 
 **Purpose**: MCP protocol implementation and tool registration
 
 - Defines FastMCP server instance
-- Registers 5 interactive tools with schemas
+- Registers 5 interactive tools (`hitl_collect`, `hitl_ask`, `hitl_choose`, `hitl_confirm`, `hitl_notify`) with schemas
 - Handles tool invocation and error wrapping
 - Provides comprehensive tool documentation
 

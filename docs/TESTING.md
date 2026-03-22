@@ -4,9 +4,21 @@
 
 ```
 tests/
-├── test_server.py    # MCP server and tool tests
-├── test_ui.py        # UI component tests
-└── test_cli.py       # CLI integration tests
+├── test_server.py              # MCP server and tool tests
+├── test_mcp_integration.py     # Full MCP protocol integration tests
+├── test_prompts.py             # UI prompt tests
+├── test_edge_cases.py          # Edge case and boundary tests
+├── test_error_handling.py      # Error handling tests
+├── test_timeout_handling.py    # Timeout scenario tests
+├── test_logging.py             # Interaction logging tests
+├── test_selection_regression.py # Selection regression tests
+├── test_fuzzy_search.py        # Fuzzy search tests
+├── test_multiline_terminal.py  # Multiline terminal behavior tests
+├── test_transport.py           # Transport layer tests
+├── test_feedback.py            # Visual feedback tests
+├── test_ui.py                  # UI component tests
+├── test_cli.py                 # CLI unit tests
+└── test_cli_integration.py     # CLI integration tests
 ```
 
 ## Running Tests
@@ -40,16 +52,16 @@ Test the full MCP protocol flow with minimal mocking:
 
 ```python
 @pytest.mark.asyncio
-async def test_request_text_input_tool(mcp_client: Client) -> None:
+async def test_hitl_collect_tool(mcp_client: Client) -> None:
     with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock:
         mock.return_value = "Test Input"
-        result = await mcp_client.call_tool("request_text_input", {...})
+        result = await mcp_client.call_tool("hitl_collect", {...})
         assert result.data == "Test Input"
 ```
 
 **What we test**:
 - MCP protocol initialization
-- Tool registration and schemas
+- Tool registration and schemas (`hitl_collect`, `hitl_ask`, `hitl_choose`, `hitl_confirm`, `hitl_notify`)
 - Tool invocation
 - Parameter validation
 - Error handling
@@ -163,7 +175,7 @@ def test_1():
 
 ✅ Good:
 ```python
-def test_request_text_input_returns_user_input():
+def test_hitl_collect_returns_user_input():
     ...
 ```
 

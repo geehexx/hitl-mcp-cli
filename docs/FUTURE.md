@@ -155,14 +155,14 @@ This document tracks potential improvements and features for future consideratio
 
 ### Existing Tool Improvements
 
-- **request_selection**:
+- **hitl_choose**:
   - Search/filter for long choice lists
   - Nested/hierarchical choices
   - Choice descriptions separate from values
-- **request_confirmation**:
+- **hitl_confirm**:
   - Three-way choice (Yes/No/Cancel)
   - Require typing confirmation phrase for dangerous operations
-- **notify_completion**:
+- **hitl_notify**:
   - Sound notifications (optional audio feedback)
   - Desktop notifications (OS-level)
   - Persistent notification log
