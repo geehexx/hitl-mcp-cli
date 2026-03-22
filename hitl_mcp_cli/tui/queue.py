@@ -63,6 +63,11 @@ class HITLQueue:
     def __init__(self) -> None:
         self._queue: asyncio.PriorityQueue[tuple[int, int, HITLRequest]] = asyncio.PriorityQueue()
         self._seq: int = 0
+        self._caller_loop: asyncio.AbstractEventLoop | None = None
+
+    def set_caller_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Register the event loop that creates futures (uvicorn thread)."""
+        self._caller_loop = loop
 
     async def put(self, request: HITLRequest) -> None:
         """Enqueue a request. The sequence number breaks priority ties (FIFO)."""
@@ -75,13 +80,27 @@ class HITLQueue:
         return request
 
     def resolve(self, request: HITLRequest, result: Any) -> None:
-        """Resolve a request's future with the user's response."""
-        if not request.future.done():
+        """Resolve a request's future with the user's response.
+
+        Uses call_soon_threadsafe when the future belongs to a different
+        event loop (uvicorn thread) than the caller (Textual thread).
+        """
+        if request.future.done():
+            return
+        loop = self._caller_loop
+        if loop is not None and loop.is_running():
+            loop.call_soon_threadsafe(request.future.set_result, result)
+        else:
             request.future.set_result(result)
 
     def reject(self, request: HITLRequest, exc: Exception) -> None:
         """Reject a request's future with an exception."""
-        if not request.future.done():
+        if request.future.done():
+            return
+        loop = self._caller_loop
+        if loop is not None and loop.is_running():
+            loop.call_soon_threadsafe(request.future.set_exception, exc)
+        else:
             request.future.set_exception(exc)
 
     @property

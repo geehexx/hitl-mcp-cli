@@ -6,7 +6,7 @@ import asyncio
 from typing import Any
 
 import pytest
-from textual.widgets import Button, Input, Label, RichLog, Select, TextArea
+from textual.widgets import Button, Input, Label, OptionList, RichLog, TextArea
 
 from hitl_mcp_cli.tui.app import HITLApp
 from hitl_mcp_cli.tui.queue import HITLQueue, HITLRequest
@@ -254,7 +254,7 @@ class TestChooseScreen:
             screen = ChooseScreen(req)
             app.push_screen(screen)
             await pilot.pause()
-            assert screen.query_one("#choose-select", Select) is not None
+            assert screen.query_one("#choose-list", OptionList) is not None
 
     @pytest.mark.asyncio
     async def test_choose_multiple_shows_buttons(self) -> None:
@@ -464,8 +464,10 @@ class TestChooseScreenInteraction:
             screen = ChooseScreen(req)
             app.push_screen(screen, callback=results.append)
             await pilot.pause()
-            # Default selection is first item; click OK
-            await pilot.click("#ok")
+            # OptionList: highlight first item and press enter to select
+            option_list = screen.query_one("#choose-list", OptionList)
+            option_list.focus()
+            await pilot.press("enter")
             await pilot.pause()
 
         assert len(results) == 1

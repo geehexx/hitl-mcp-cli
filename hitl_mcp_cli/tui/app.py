@@ -120,8 +120,16 @@ class HITLApp(App[None]):
                 request = await self._hitl_queue.get()
                 self.update_queue_status()
                 try:
-                    result = await self.push_screen_wait(screen_for(request))
-                    self._hitl_queue.resolve(request, result)
+                    if request.tool in ("hitl_notify", "notify"):
+                        params = request.params
+                        agent = params.get("title") or "agent"
+                        message = params.get("message", "")
+                        level = params.get("level", "info")
+                        self.stream_output(agent, message, level)
+                        self._hitl_queue.resolve(request, True)
+                    else:
+                        result = await self.push_screen_wait(screen_for(request))
+                        self._hitl_queue.resolve(request, result)
                 except Exception as e:
                     logger.error(f"Screen error for {request.tool}: {e}", exc_info=True)
                     self._hitl_queue.reject(request, e)

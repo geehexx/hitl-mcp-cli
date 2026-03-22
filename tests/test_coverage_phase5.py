@@ -7,7 +7,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from textual.widgets import Button, Select, TextArea
+from textual.widgets import Button, OptionList, TextArea
 
 from hitl_mcp_cli.tui.app import HITLApp
 from hitl_mcp_cli.tui.queue import HITLQueue, HITLRequest
@@ -262,7 +262,7 @@ class TestAppOnMount:
         queue = HITLQueue()
         app = _TestApp(hitl_queue=queue)
 
-        async with app.run_test() as pilot:
+        async with app.run_test():
             req = _make_request("notify", {"message": "hi"})
             await queue.put(req)
 
@@ -276,7 +276,7 @@ class TestAppOnMount:
         queue = HITLQueue()
         app = _TestApp(hitl_queue=queue)
 
-        async with app.run_test() as pilot:
+        async with app.run_test():
             req = _make_request("notify", {"message": "hi"})
             await queue.put(req)
 
@@ -373,10 +373,10 @@ class TestChooseScreenToggle:
         assert "alpha" in results[0]
 
 
-class TestChooseScreenBlankFallback:
+class TestChooseScreenOptionListSelection:
     @pytest.mark.asyncio
-    async def test_ok_with_blank_select(self) -> None:
-        """Cover L219: Select.BLANK fallback in _on_ok."""
+    async def test_option_list_select_first(self) -> None:
+        """Cover OptionList selection in single-choice mode."""
         app = _TestApp(hitl_queue=HITLQueue())
         results: list[Any] = []
 
@@ -391,10 +391,9 @@ class TestChooseScreenBlankFallback:
             screen = ChooseScreen(req)
             app.push_screen(screen, callback=results.append)
             await pilot.pause()
-            # Patch the select widget's value property to return BLANK
-            sel = screen.query_one("#choose-select", Select)
-            with patch.object(type(sel), "value", new_callable=lambda: property(lambda self: Select.BLANK)):
-                screen._on_ok()
+            option_list = screen.query_one("#choose-list", OptionList)
+            option_list.focus()
+            await pilot.press("enter")
             await pilot.pause()
 
         assert results == ["first"]
@@ -488,7 +487,7 @@ class TestProcessQueueWorker:
             await pilot.pause(0.5)
             # The NotifyScreen auto-dismisses after 3s, but we can dismiss manually
             try:
-                dismiss_btn = app.query_one("#dismiss", Button)
+                app.query_one("#dismiss", Button)
                 await pilot.click("#dismiss")
             except Exception:
                 pass

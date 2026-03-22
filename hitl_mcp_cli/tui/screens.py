@@ -9,7 +9,8 @@ from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, Markdown, Select, Static, TextArea
+from textual.widgets import Button, Input, Label, Markdown, OptionList, Static, TextArea
+from textual.widgets.option_list import Option
 
 from .queue import HITLRequest
 
@@ -187,19 +188,21 @@ class CollectScreen(ModalScreen[str | dict[str, str]]):
 
 
 class ChooseScreen(ModalScreen[str | list[str] | dict[str, str]]):
-    """Selection from a list of choices."""
+    """Selection from a list of choices, shown inline with keyboard navigation."""
 
     DEFAULT_CSS = """
     ChooseScreen {
         align: center middle;
     }
     #choose-dialog {
-        width: 60;
-        max-height: 24;
+        width: 70;
+        max-height: 30;
         padding: 1 2;
         background: $surface;
         border: thick $accent;
     }
+    #choose-list { height: auto; max-height: 16; }
+    #custom-input { margin-top: 1; }
     """
 
     def __init__(self, request: HITLRequest) -> None:
@@ -207,8 +210,22 @@ class ChooseScreen(ModalScreen[str | list[str] | dict[str, str]]):
         super().__init__()
         self._message: str = request.params.get("message", "")
         self._choices: list[str] = request.params.get("choices", [])
+        self._options: list[dict[str, str]] = request.params.get("options", [])
         self._multiple: bool = request.params.get("multiple", False)
         self._selected: set[str] = set()
+
+    def _build_options(self) -> list[Option]:
+        """Build OptionList options from choices or rich options param."""
+        if self._options:
+            return [
+                Option(
+                    f"{o.get('label', o['value'])}"
+                    + (f"\n[dim]{o['description']}[/dim]" if o.get("description") else ""),
+                    id=o["value"],
+                )
+                for o in self._options
+            ]
+        return [Option(c, id=c) for c in self._choices]
 
     def compose(self) -> ComposeResult:
         """Compose the choice selection dialog UI."""
@@ -221,11 +238,22 @@ class ChooseScreen(ModalScreen[str | list[str] | dict[str, str]]):
                     yield Button("Done", variant="success", id="done")
                     yield Button("Cancel", variant="error", id="cancel")
             else:
-                options = [(c, c) for c in self._choices]
-                yield Select[str](options, id="choose-select", allow_blank=False)
+                yield OptionList(*self._build_options(), id="choose-list")
+                yield Input(placeholder="Or type a custom value...", id="custom-input")
                 with Horizontal():
-                    yield Button("OK", variant="success", id="ok")
                     yield Button("Cancel", variant="error", id="cancel")
+
+    @on(OptionList.OptionSelected, "#choose-list")
+    def _on_option_selected(self, event: OptionList.OptionSelected) -> None:
+        """Immediately dismiss on option selection (Enter key)."""
+        self.dismiss(str(event.option.id))
+
+    @on(Input.Submitted, "#custom-input")
+    def _on_custom_submit(self, event: Input.Submitted) -> None:
+        """Submit custom free-text value."""
+        value = event.value.strip()
+        if value:
+            self.dismiss(value)
 
     @on(Button.Pressed, ".choice-btn")
     def _toggle_choice(self, event: Button.Pressed) -> None:
@@ -244,16 +272,6 @@ class ChooseScreen(ModalScreen[str | list[str] | dict[str, str]]):
     def _on_done(self) -> None:
         """Handle done button press for multiple selection."""
         self.dismiss(sorted(self._selected))
-
-    @on(Button.Pressed, "#ok")
-    def _on_ok(self) -> None:
-        """Handle OK button press for single selection."""
-        select = self.query_one("#choose-select", Select)
-        value = select.value
-        if value is not Select.BLANK:
-            self.dismiss(str(value))
-        else:
-            self.dismiss(self._choices[0] if self._choices else "")
 
     @on(Button.Pressed, "#cancel")
     def _on_cancel(self) -> None:

@@ -33,7 +33,10 @@ async def _tui_enqueue(tool: str, params: dict[str, Any]) -> Any:
     from .tui.queue import HITLRequest
 
     assert _tui_queue is not None
-    future: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
+    loop = asyncio.get_running_loop()
+    if _tui_queue._caller_loop is None:
+        _tui_queue.set_caller_loop(loop)
+    future: asyncio.Future[Any] = loop.create_future()
     request = HITLRequest(tool=tool, params=params, future=future)
     await _tui_queue.put(request)
     return await future
