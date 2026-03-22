@@ -89,7 +89,7 @@ async def hitl_collect(
         )
     ms = int((time.monotonic() - t0) * 1000)
     rt: ResultType = "cancel" if isinstance(result, dict) else "value"
-    log_interaction("hitl_collect", ms, rt)
+    log_interaction("hitl_collect", ms, rt, message=message, result=str(result)[:80], notes=notes)
     return cast("str | dict[str, str]", result)
 
 
@@ -121,7 +121,7 @@ async def hitl_ask(
         )
     ms = int((time.monotonic() - t0) * 1000)
     rt: ResultType = "cancel" if isinstance(result, dict) else "value"
-    log_interaction("hitl_ask", ms, rt)
+    log_interaction("hitl_ask", ms, rt, message=message, result=str(result)[:80], notes=notes)
     return cast("str | dict[str, str]", result)
 
 
@@ -201,7 +201,7 @@ async def hitl_choose(
             },
         )
         ms = int((time.monotonic() - t0) * 1000)
-        log_interaction("hitl_choose", ms, "value")
+        log_interaction("hitl_choose", ms, "value", message=message, result=str(result)[:80], notes=notes)
         if display_to_value and isinstance(result, str):
             return display_to_value.get(result, result)
         if display_to_value and isinstance(result, list):
@@ -212,7 +212,7 @@ async def hitl_choose(
         if multiple:
             raw: Any = await prompt_checkbox(message, choices, notes)
             ms = int((time.monotonic() - t0) * 1000)
-            log_interaction("hitl_choose", ms, "value")
+            log_interaction("hitl_choose", ms, "value", message=message, result=str(raw)[:80], notes=notes)
             if isinstance(raw, dict):
                 # Escape hatch returned dict with note
                 if display_to_value:
@@ -223,13 +223,13 @@ async def hitl_choose(
             return list(raw) if raw else []
         result_str: str = await prompt_select(message, choices, default, notes)
         ms = int((time.monotonic() - t0) * 1000)
-        log_interaction("hitl_choose", ms, "value")
+        log_interaction("hitl_choose", ms, "value", message=message, result=result_str[:80], notes=notes)
         if display_to_value is not None:
             return display_to_value.get(result_str, result_str)
         return result_str
     except KeyboardInterrupt:
         ms = int((time.monotonic() - t0) * 1000)
-        log_interaction("hitl_choose", ms, "cancel")
+        log_interaction("hitl_choose", ms, "cancel", message=message, notes=notes)
         return {"action": "cancel"}
     except Exception as e:
         raise Exception(f"Selection failed: {str(e)}") from e
@@ -273,16 +273,18 @@ async def hitl_confirm(
                     timeout=timeout_seconds,
                 )
                 ms = int((time.monotonic() - t0) * 1000)
-                log_interaction("hitl_confirm", ms, "value")
+                log_interaction(
+                    "hitl_confirm", ms, "value", message=message, result=str(tui_result), notes=notes
+                )
                 tui_result["timed_out"] = False
                 return tui_result
             tui_result = await _tui_enqueue("hitl_confirm", tui_params)
             ms = int((time.monotonic() - t0) * 1000)
-            log_interaction("hitl_confirm", ms, "value")
+            log_interaction("hitl_confirm", ms, "value", message=message, result=str(tui_result), notes=notes)
             return tui_result
         except TimeoutError:
             ms = int((time.monotonic() - t0) * 1000)
-            log_interaction("hitl_confirm", ms, "timeout")
+            log_interaction("hitl_confirm", ms, "timeout", message=message, notes=notes)
             return {"action": "decline", "timed_out": True}
 
     try:
@@ -304,20 +306,22 @@ async def hitl_confirm(
             try:
                 confirmed = await asyncio.wait_for(_do_confirm(), timeout=timeout_seconds)
                 ms = int((time.monotonic() - t0) * 1000)
-                log_interaction("hitl_confirm", ms, "value")
+                log_interaction(
+                    "hitl_confirm", ms, "value", message=message, result=str(confirmed), notes=notes
+                )
                 return {"action": "accept" if confirmed else "decline", "timed_out": False}
             except TimeoutError:
                 ms = int((time.monotonic() - t0) * 1000)
-                log_interaction("hitl_confirm", ms, "timeout")
+                log_interaction("hitl_confirm", ms, "timeout", message=message, notes=notes)
                 return {"action": "decline", "timed_out": True}
 
         confirmed = await _do_confirm()
         ms = int((time.monotonic() - t0) * 1000)
-        log_interaction("hitl_confirm", ms, "value")
+        log_interaction("hitl_confirm", ms, "value", message=message, result=str(confirmed), notes=notes)
         return {"action": "accept" if confirmed else "decline"}
     except KeyboardInterrupt:
         ms = int((time.monotonic() - t0) * 1000)
-        log_interaction("hitl_confirm", ms, "cancel")
+        log_interaction("hitl_confirm", ms, "cancel", message=message, notes=notes)
         if timeout_seconds > 0:
             return {"action": "cancel", "timed_out": False}
         return {"action": "cancel"}
@@ -348,13 +352,13 @@ async def hitl_notify(
     if _tui_queue is not None and _tui_app is not None:
         _tui_app.call_from_thread(_tui_app.stream_output, title or "agent", message, level)
         ms = int((time.monotonic() - t0) * 1000)
-        log_interaction("hitl_notify", ms, "value")
+        log_interaction("hitl_notify", ms, "value", message=message, notes=notes)
         return {"acknowledged": True}
 
     try:
         display_notification(title or level.capitalize(), message, level, notes)
         ms = int((time.monotonic() - t0) * 1000)
-        log_interaction("hitl_notify", ms, "value")
+        log_interaction("hitl_notify", ms, "value", message=message, notes=notes)
         return {"acknowledged": True}
     except Exception as e:
         raise Exception(f"Notification display failed: {str(e)}") from e

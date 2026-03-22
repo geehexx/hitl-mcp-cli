@@ -433,6 +433,18 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture docum
 
 ---
 
+## 📋 Logs
+
+HITL MCP logs every tool interaction to `~/.local/state/hitl-mcp/interactions.jsonl` as JSONL. Each entry includes tool name, duration, result type, and a preview of the message and result. The log auto-rotates at 10 MB.
+
+A sample logrotate config is provided at [docs/logrotate.conf](docs/logrotate.conf):
+
+```bash
+sudo cp docs/logrotate.conf /etc/logrotate.d/hitl-mcp
+```
+
+---
+
 ## 🧪 Development
 
 ### Setup
