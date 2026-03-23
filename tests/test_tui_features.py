@@ -17,7 +17,7 @@ class _TestApp(HITLApp):
     def on_mount(self) -> None:
         # Init tables only, no server thread
         st = self.query_one("#sessions-table", DataTable)
-        st.add_columns("ID", "Project", "Calls", "Last seen")
+        st.add_columns("ID", "Calls", "Pending", "Last active")
         qt = self.query_one("#queue-table", DataTable)
         qt.add_columns("#", "Tool", "Message")
 

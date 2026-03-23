@@ -11,15 +11,16 @@ from typing import Any
 
 import uvicorn
 from rich.markup import escape
-from textual import work
+from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
+from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Label, RichLog
 
 from .queue import HITLQueue
-from .screens import _expand_escapes, _has_markdown, screen_for
+from .screens import _MINIMIZED, _expand_escapes, _has_markdown, screen_for
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ class HITLApp(App[None]):
         Binding("ctrl+b", "toggle_sessions", "Sessions"),
         Binding("f2", "cycle_log_level", "Log level"),
         Binding("f3", "toggle_sessions", "Sessions", show=False),  # VS Code-safe alternative
-        Binding("ctrl+backslash", "command_palette", "Commands", show=True),
+        Binding("escape", "restore_prompt", "Restore prompt", show=False),
     ]
 
     # Reactive state
@@ -66,6 +67,12 @@ class HITLApp(App[None]):
         self._mcp_app = mcp_app
         self._server_thread: threading.Thread | None = None
         self._sessions: dict[str, dict[str, Any]] = {}
+        # FIX 2: Store minimized prompt screen so Escape can pop/restore it.
+        # Escape on a prompt screen dismisses with _MINIMIZED sentinel.
+        # The queue worker detects this and re-pushes the same screen.
+        # Escape on the main app re-pushes the stored screen.
+        self._pending_screen: Screen[Any] | None = None
+        self._restore_event = asyncio.Event()
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -73,12 +80,17 @@ class HITLApp(App[None]):
             with Vertical(id="sessions-pane"):
                 yield Label("Sessions", classes="pane-title")
                 yield DataTable(id="sessions-table", show_cursor=True, zebra_stripes=True)
+                yield Label(
+                    "No active sessions. Waiting for tool calls...",
+                    id="sessions-placeholder",
+                    classes="placeholder-text",
+                )
             with Vertical(id="activity-pane"):
                 yield Label("Activity", classes="pane-title")
-                yield RichLog(id="output-log", highlight=True, auto_scroll=True, markup=True)
+                yield RichLog(id="output-log", highlight=True, auto_scroll=True, markup=True, wrap=True)
             with Vertical(id="queue-pane"):
                 yield Label("Queue", classes="pane-title")
-                yield DataTable(id="queue-table", show_cursor=False, zebra_stripes=True)
+                yield DataTable(id="queue-table", show_cursor=True, zebra_stripes=True)
         yield Label("[blue]INFO[/blue]  Sessions: 0  Queue: 0", id="status-bar")
         yield Footer()
 
@@ -89,8 +101,12 @@ class HITLApp(App[None]):
 
     def on_mount(self) -> None:
         """Initialize tables, start server + queue worker."""
+        # Register the Textual event loop so the queue can accept
+        # cross-thread put_threadsafe() calls from the uvicorn thread.
+        self._hitl_queue.set_textual_loop(asyncio.get_running_loop())
+
         st = self.query_one("#sessions-table", DataTable)
-        st.add_columns("ID", "Project", "Calls", "Last seen")
+        st.add_columns("Client", "Calls", "Pending", "Last active")
 
         qt = self.query_one("#queue-table", DataTable)
         qt.add_columns("#", "Tool", "Message")
@@ -98,7 +114,9 @@ class HITLApp(App[None]):
         log = self.query_one("#output-log", RichLog)
         log.write("[bold cyan]HITL MCP Server[/bold cyan] [dim]v0.8.0[/dim]")
         log.write(f"[dim]Listening on http://{self._host}:{self._port}[/dim]")
-        log.write("[dim]Press [bold]ctrl+\\[/bold] for commands, [bold]q[/bold] to quit[/dim]")
+        log.write(
+            "[dim]Press [bold]q[/bold] to quit, [bold]f2[/bold] log level, [bold]ctrl+l[/bold] clear[/dim]"
+        )
         log.write("")
 
         if self._mcp_app is not None:
@@ -164,6 +182,21 @@ class HITLApp(App[None]):
         self.min_level = LOG_LEVELS[(idx + 1) % len(LOG_LEVELS)]
         self.notify(f"Log level: {self.min_level}", timeout=2)
 
+    def action_restore_prompt(self) -> None:
+        """Signal the queue worker to re-push the minimized prompt screen."""
+        if self._pending_screen is not None:
+            self._pending_screen = None
+            self._restore_event.set()
+
+    @on(DataTable.RowSelected, "#queue-table")
+    def _on_queue_row_selected(self, event: DataTable.RowSelected) -> None:
+        """Click a queue item to restore a minimized prompt."""
+        if self._pending_screen is not None:
+            self._pending_screen = None
+            self._restore_event.set()
+        else:
+            self.notify("This prompt is already active", timeout=2)
+
     # --- Public API (called from server thread) ---
 
     def stream_output(self, agent: str, message: str, level: str = "info") -> None:
@@ -185,31 +218,65 @@ class HITLApp(App[None]):
         else:
             log.write(message)
 
-    def record_session_activity(self, session_id: str, tool: str, project_id: str | None = None) -> None:
+    def record_session_activity(
+        self, session_id: str, tool: str, project_id: str | None = None, client_name: str | None = None
+    ) -> None:
         """Record a tool call from a session. Call via call_from_thread."""
-        short_id = session_id[:8] if len(session_id) > 8 else session_id
         now = datetime.now().strftime("%H:%M:%S")
+        display_name = client_name or "unknown"
         table = self.query_one("#sessions-table", DataTable)
 
+        # Hide placeholder on first real session
+        try:
+            self.query_one("#sessions-placeholder").display = False
+        except Exception:
+            pass
+
         if session_id not in self._sessions:
-            self._sessions[session_id] = {"project": project_id or "", "calls": 1, "last_seen": now}
-            table.add_row(short_id, project_id or "", "1", now, key=session_id)
+            self._sessions[session_id] = {
+                "calls": 1,
+                "pending": 1,
+                "completed": 0,
+                "last_active": now,
+                "client_name": display_name,
+            }
+            table.add_row(display_name, "1", "1", now, key=session_id)
             self.session_count = len(self._sessions)
             self.stream_output(
                 "server",
-                f"New session: [bold]{short_id}[/bold]"
+                f"New session: [bold cyan]{escape(display_name)}[/bold cyan]"
                 + (f" project=[cyan]{escape(project_id)}[/cyan]" if project_id else ""),
                 "info",
             )
         else:
-            self._sessions[session_id]["calls"] += 1
-            self._sessions[session_id]["last_seen"] = now
-            calls = self._sessions[session_id]["calls"]
+            s = self._sessions[session_id]
+            s["calls"] += 1
+            s["pending"] += 1
+            s["last_active"] = now
             try:
-                table.update_cell(session_id, "Calls", str(calls))
-                table.update_cell(session_id, "Last seen", now)
+                table.update_cell(session_id, "Calls", str(s["calls"]))
+                table.update_cell(session_id, "Pending", str(s["pending"]))
+                table.update_cell(session_id, "Last active", now)
             except Exception:
                 pass
+        # F7: Ensure table refreshes after update
+        table.refresh()
+
+    def record_session_resolved(self, session_id: str) -> None:
+        """Record that a request from this session was resolved."""
+        if session_id not in self._sessions:
+            return
+        s = self._sessions[session_id]
+        s["pending"] = max(0, s["pending"] - 1)
+        s["completed"] += 1
+        s["last_active"] = datetime.now().strftime("%H:%M:%S")
+        table = self.query_one("#sessions-table", DataTable)
+        try:
+            table.update_cell(session_id, "Pending", str(s["pending"]))
+            table.update_cell(session_id, "Last active", s["last_active"])
+        except Exception:
+            pass
+        table.refresh()
 
     def add_queue_row(self, request_id: str, tool: str, message: str) -> None:
         """Add a row to the queue table. Call via call_from_thread."""
@@ -239,6 +306,7 @@ class HITLApp(App[None]):
             while True:
                 request = await self._hitl_queue.get()
                 self.update_queue_status()
+                _start = asyncio.get_event_loop().time()
                 try:
                     if request.tool in ("hitl_notify", "notify"):
                         params = request.params
@@ -249,12 +317,76 @@ class HITLApp(App[None]):
                         self._hitl_queue.resolve(request, True)
                     else:
                         msg = request.params.get("message", "")
+                        client_name = request.params.get("_client_name", "unknown")
+                        severity = request.params.get("severity", "")
+                        timeout_s = request.params.get("timeout_seconds", 0)
+                        short_msg = msg[:40] + "..." if len(msg) > 40 else msg
+                        detail_parts: list[str] = [short_msg] if short_msg else []
+                        if severity:
+                            detail_parts.append(f"severity={severity}")
+                        if timeout_s:
+                            detail_parts.append(f"timeout={timeout_s}s")
+                        detail_suffix = f" — {', '.join(detail_parts)}" if detail_parts else ""
+                        self.stream_output(
+                            "queue",
+                            f"▶ [bold]{request.tool}[/bold] \\[{client_name}]{detail_suffix}",
+                            "info",
+                        )
                         self.add_queue_row(request.request_id, request.tool, msg)
-                        result = await self.push_screen_wait(screen_for(request))
+                        # FIX 2: Loop handles Escape-to-minimize. When the user
+                        # presses Escape, the screen dismisses with _MINIMIZED
+                        # sentinel. We store it and wait for restore, then re-push.
+                        screen = screen_for(request)
+                        result = _MINIMIZED
+                        while result == _MINIMIZED:
+                            result = await self.push_screen_wait(screen)
+                            if result == _MINIMIZED:
+                                self._pending_screen = screen
+                                self.notify(
+                                    "Prompt minimized — press Escape to restore",
+                                    timeout=3,
+                                )
+                                # Wait until action_restore_prompt signals via Event
+                                await self._restore_event.wait()
+                                self._restore_event.clear()
+                                # Screen was re-pushed by action_restore_prompt;
+                                # create a fresh instance to avoid compose errors.
+                                screen = screen_for(request)
                         self.remove_queue_row(request.request_id)
+                        elapsed = asyncio.get_event_loop().time() - _start
+                        # F9: Determine resolution type for richer log
+                        client_name = request.params.get("_client_name", "unknown")
+                        if isinstance(result, dict) and result.get("action") == "cancel":
+                            self.stream_output(
+                                "queue",
+                                f"✕ [bold]{request.tool}[/bold] \\[{client_name}] — cancelled (elapsed: {elapsed:.1f}s)",
+                                "warning",
+                            )
+                        else:
+                            action = result.get("action", "value") if isinstance(result, dict) else "value"
+                            self.stream_output(
+                                "queue",
+                                f"✓ [bold]{request.tool}[/bold] \\[{client_name}] — {action} (elapsed: {elapsed:.1f}s)",
+                                "success",
+                            )
                         self._hitl_queue.resolve(request, result)
                 except Exception as e:
                     logger.error(f"Screen error for {request.tool}: {e}", exc_info=True)
+                    elapsed = asyncio.get_event_loop().time() - _start
+                    client_name = request.params.get("_client_name", "unknown")
+                    timeout_s = request.params.get("timeout_seconds", 0)
+                    if "TimeoutError" in type(e).__name__ or "timeout" in str(e).lower():
+                        self.stream_output(
+                            "queue",
+                            f"⏱ [bold]{request.tool}[/bold] \\[{client_name}] — timed out after {timeout_s}s",
+                            "error",
+                        )
+                    else:
+                        self.stream_output(
+                            "queue",
+                            f"⏱ [bold]{request.tool}[/bold] \\[{client_name}] — failed after {elapsed:.1f}s",
+                            "error",
+                        )
                     self.remove_queue_row(request.request_id)
                     self._hitl_queue.reject(request, e)
                 self.update_queue_status()

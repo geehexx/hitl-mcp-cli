@@ -1,4 +1,12 @@
-"""Textual ModalScreen subclasses for each HITL tool type."""
+"""Textual Screen subclasses for each HITL tool type.
+
+FIX 2 rationale (focus management): Screens use non-modal Screen (not
+ModalScreen) and support Escape-to-minimize. Pressing Escape dismisses
+the screen with a _MINIMIZED sentinel; the queue worker in app.py detects
+this, waits for the user to press Escape again on the main app, then
+re-pushes a fresh screen. This lets users inspect Sessions/Activity panes
+between prompt interactions without losing the pending request.
+"""
 
 from __future__ import annotations
 
@@ -7,12 +15,38 @@ from typing import Any
 
 from textual import on
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.screen import ModalScreen
+from textual.screen import Screen
 from textual.widgets import Button, Input, Label, Markdown, OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 
 from .queue import HITLRequest
+
+# Sentinel value for Escape-to-minimize (FIX 2).
+_MINIMIZED: dict[str, str] = {"action": "__minimized__"}
+
+# Shared CSS for non-modal overlay behavior (FIX 2) and text wrapping (FIX 1).
+_OVERLAY_CSS = """
+    background: $background 60%;
+    overflow-y: auto;
+
+    Static {
+        width: 1fr;
+    }
+"""
+
+# Shared CSS for notes display (FIX 3 + FIX A: distinct styling).
+# F2: reduced gap from 2 (margin-top:1 + padding-top:1) to 1 (padding-top only).
+_NOTES_CSS = """
+    .notes {
+        color: $text-muted;
+        text-style: dim italic;
+        width: 1fr;
+        border-top: solid $panel-darken-1;
+        padding-top: 1;
+    }
+"""
 
 
 def _expand_escapes(text: str) -> str:
@@ -33,19 +67,37 @@ def _has_markdown(text: str) -> bool:
     )
 
 
-class ConfirmScreen(ModalScreen[dict[str, Any]]):
+def _notes_widget(notes: str | None) -> Static | None:
+    """Return a Static widget for notes, or None if empty."""
+    if notes:
+        return Static(
+            f"[bold cyan]ℹ[/bold cyan] [dim italic]{_expand_escapes(notes)}[/dim italic]", classes="notes"
+        )
+    return None
+
+
+class ConfirmScreen(Screen[dict[str, Any]]):
     """Yes/No confirmation with severity styling."""
 
-    DEFAULT_CSS = """
+    BINDINGS = [Binding("escape", "minimize", "Minimize", show=False)]
+
+    DEFAULT_CSS = (
+        """
     ConfirmScreen {
         align: center middle;
+        """
+        + _OVERLAY_CSS
+        + """
     }
     #confirm-dialog {
-        width: 60;
-        max-height: 20;
+        width: 95%;
+        max-width: 120;
+        height: auto;
+        max-height: 90%;
         padding: 1 2;
         background: $surface;
         border: thick $accent;
+        overflow-y: auto;
     }
     #confirm-dialog.severity-high {
         border: thick red;
@@ -53,11 +105,20 @@ class ConfirmScreen(ModalScreen[dict[str, Any]]):
     #confirm-dialog.severity-medium {
         border: thick yellow;
     }
+    .context {
+        width: 1fr;
+    }
     #confirm-buttons {
         height: 3;
+        width: 1fr;
         align: center middle;
     }
+    #confirm-buttons Button {
+        width: 1fr;
+    }
     """
+        + _NOTES_CSS
+    )
 
     def __init__(self, request: HITLRequest) -> None:
         """Initialize confirmation screen from HITL request."""
@@ -65,14 +126,18 @@ class ConfirmScreen(ModalScreen[dict[str, Any]]):
         self._message: str = request.params.get("message", "")
         self._severity: str = request.params.get("severity", "medium")
         self._ctx_text: str | None = request.params.get("context")
+        self._notes: str | None = request.params.get("notes")
 
     def compose(self) -> ComposeResult:
         """Compose the confirmation dialog UI."""
         severity_class = f"severity-{self._severity}"
         with Vertical(id="confirm-dialog", classes=severity_class):
             if self._ctx_text:
-                yield Static(self._ctx_text, classes="context")
-            yield Label(self._message)
+                yield Static(_expand_escapes(self._ctx_text), classes="context")
+            yield Static(self._message)
+            notes_w = _notes_widget(self._notes)
+            if notes_w:
+                yield notes_w
             if self._severity == "high":
                 yield Input(placeholder='Type "yes" to confirm', id="high-input")
             else:
@@ -98,20 +163,41 @@ class ConfirmScreen(ModalScreen[dict[str, Any]]):
         else:
             self.dismiss({"action": "decline"})
 
+    def action_minimize(self) -> None:
+        """Minimize prompt so user can inspect background panes."""
+        self.dismiss(_MINIMIZED)
 
-class CollectScreen(ModalScreen[str | dict[str, str]]):
+
+class CollectScreen(Screen[str | dict[str, str]]):
     """Text/path/multiline input collection."""
 
-    DEFAULT_CSS = """
+    BINDINGS = [
+        Binding("escape", "minimize", "Minimize", show=False),
+        Binding("ctrl+j", "submit", "Submit (Ctrl+Enter)", show=True),
+    ]
+
+    DEFAULT_CSS = (
+        """
     CollectScreen {
         align: center middle;
+        """
+        + _OVERLAY_CSS
+        + """
     }
     #collect-dialog {
-        width: 70;
-        max-height: 24;
+        width: 95%;
+        max-width: 120;
+        height: 90%;
         padding: 1 2;
         background: $surface;
         border: thick $accent;
+        overflow-y: auto;
+    }
+    #collect-input {
+        min-height: 3;
+        max-height: 8;
+        margin-top: 1;
+        margin-bottom: 1;
     }
     .validation-error {
         color: red;
@@ -120,7 +206,16 @@ class CollectScreen(ModalScreen[str | dict[str, str]]):
     .validation-error.visible {
         display: block;
     }
+    #collect-buttons {
+        width: 1fr;
+        align: center middle;
+    }
+    #collect-buttons Button {
+        width: 1fr;
+    }
     """
+        + _NOTES_CSS
+    )
 
     def __init__(self, request: HITLRequest) -> None:
         """Initialize collection screen from HITL request."""
@@ -130,19 +225,16 @@ class CollectScreen(ModalScreen[str | dict[str, str]]):
         self._default_val: str | None = request.params.get("default")
         self._validation_pattern: str | None = request.params.get("validation_pattern")
         self._validation_message: str | None = request.params.get("validation_message")
+        self._notes: str | None = request.params.get("notes")
 
     def compose(self) -> ComposeResult:
         """Compose the collection dialog UI."""
         with Vertical(id="collect-dialog"):
-            yield Label(self._message)
-            if self._input_type == "multiline":
-                yield TextArea(self._default_val or "", id="collect-input")
-            else:
-                yield Input(
-                    value=self._default_val or "",
-                    placeholder="Enter value...",
-                    id="collect-input",
-                )
+            yield Static(self._message)
+            notes_w = _notes_widget(self._notes)
+            if notes_w:
+                yield notes_w
+            yield TextArea(self._default_val or "", id="collect-input")
             yield Label(
                 self._validation_message or "Invalid input",
                 classes="validation-error",
@@ -154,12 +246,7 @@ class CollectScreen(ModalScreen[str | dict[str, str]]):
 
     def _get_value(self) -> str:
         """Get the current input value from the widget."""
-        widget = self.query_one("#collect-input")
-        if isinstance(widget, TextArea):
-            return widget.text
-        if isinstance(widget, Input):
-            return widget.value
-        return ""
+        return self.query_one("#collect-input", TextArea).text
 
     def _validate(self, value: str) -> bool:
         """Validate input against the validation pattern."""
@@ -184,29 +271,51 @@ class CollectScreen(ModalScreen[str | dict[str, str]]):
         """Handle cancel button press."""
         self.dismiss({"action": "cancel"})
 
-    @on(Input.Submitted, "#collect-input")
-    def _on_input_submit(self, event: Input.Submitted) -> None:
-        """Handle input submission."""
+    def action_submit(self) -> None:
+        """Handle Ctrl+Enter submission."""
         self._on_submit()
 
+    def action_minimize(self) -> None:
+        """Minimize prompt so user can inspect background panes."""
+        self.dismiss(_MINIMIZED)
 
-class ChooseScreen(ModalScreen[str | list[str] | dict[str, str]]):
+
+class ChooseScreen(Screen[str | list[str] | dict[str, str]]):
     """Selection from a list of choices, shown inline with keyboard navigation."""
 
-    DEFAULT_CSS = """
+    BINDINGS = [Binding("escape", "minimize", "Minimize", show=False)]
+
+    DEFAULT_CSS = (
+        """
     ChooseScreen {
         align: center middle;
+        """
+        + _OVERLAY_CSS
+        + """
     }
     #choose-dialog {
-        width: 70;
-        max-height: 30;
+        width: 95%;
+        max-width: 120;
+        height: auto;
+        max-height: 90%;
         padding: 1 2;
         background: $surface;
         border: thick $accent;
+        overflow-y: auto;
     }
-    #choose-list { height: auto; max-height: 16; }
+    #choose-list { height: auto; max-height: 16; width: 1fr; }
+    .choice-btn { width: 1fr; }
     #custom-input { margin-top: 1; }
+    #choose-dialog Horizontal {
+        width: 1fr;
+        align: center middle;
+    }
+    #choose-dialog Horizontal Button {
+        width: 1fr;
+    }
     """
+        + _NOTES_CSS
+    )
 
     def __init__(self, request: HITLRequest) -> None:
         """Initialize choice screen from HITL request."""
@@ -216,6 +325,7 @@ class ChooseScreen(ModalScreen[str | list[str] | dict[str, str]]):
         self._options: list[dict[str, str]] = request.params.get("options", [])
         self._multiple: bool = request.params.get("multiple", False)
         self._selected: set[str] = set()
+        self._notes: str | None = request.params.get("notes")
 
     def _build_options(self) -> list[Option]:
         """Build OptionList options from choices or rich options param."""
@@ -233,7 +343,10 @@ class ChooseScreen(ModalScreen[str | list[str] | dict[str, str]]):
     def compose(self) -> ComposeResult:
         """Compose the choice selection dialog UI."""
         with Vertical(id="choose-dialog"):
-            yield Label(self._message)
+            yield Static(self._message)
+            notes_w = _notes_widget(self._notes)
+            if notes_w:
+                yield notes_w
             if self._multiple:
                 for choice in self._choices:
                     yield Button(f"☐ {choice}", id=f"choice-{choice}", classes="choice-btn")
@@ -281,28 +394,40 @@ class ChooseScreen(ModalScreen[str | list[str] | dict[str, str]]):
         """Handle cancel button press."""
         self.dismiss({"action": "cancel"})
 
+    def action_minimize(self) -> None:
+        """Minimize prompt so user can inspect background panes."""
+        self.dismiss(_MINIMIZED)
 
-class NotifyScreen(ModalScreen[bool]):
+
+class NotifyScreen(Screen[bool]):
     """Auto-dismissing notification display."""
 
     AUTO_DISMISS_SECONDS: float = 3.0
 
-    DEFAULT_CSS = """
+    DEFAULT_CSS = (
+        """
     NotifyScreen {
         align: center middle;
+        """
+        + _OVERLAY_CSS
+        + """
     }
     #notify-dialog {
-        width: 50;
-        max-height: 12;
+        width: 95%;
+        max-width: 120;
+        height: auto;
+        max-height: 90%;
         padding: 1 2;
         background: $surface;
         border: thick $accent;
+        overflow-y: auto;
     }
     #notify-dialog.level-success { border: thick green; }
     #notify-dialog.level-error { border: thick red; }
     #notify-dialog.level-warning { border: thick yellow; }
     #notify-dialog.level-info { border: thick blue; }
     """
+    )
 
     def __init__(self, request: HITLRequest) -> None:
         """Initialize notification screen from HITL request."""
@@ -340,7 +465,7 @@ class NotifyScreen(ModalScreen[bool]):
         self.dismiss(True)
 
 
-def screen_for(request: HITLRequest) -> ModalScreen[Any]:
+def screen_for(request: HITLRequest) -> Screen[Any]:
     """Factory: return the appropriate screen for a given HITL request."""
     tool = request.tool
     if tool in ("hitl_confirm", "confirm"):

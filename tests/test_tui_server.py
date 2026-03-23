@@ -132,7 +132,7 @@ class TestHitlNotifyTuiMode:
 
         result = await _hitl_notify(message="Done!", title="Build")
         assert result == {"acknowledged": True}
-        assert app.call_from_thread.call_count == 2
+        assert app.call_from_thread.call_count == 3
         app.call_from_thread.assert_any_call(app.stream_output, "Build", "Done!", "info")
 
     @pytest.mark.asyncio

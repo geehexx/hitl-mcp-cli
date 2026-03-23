@@ -199,7 +199,7 @@ class TestCollectScreen:
             screen = CollectScreen(req)
             app.push_screen(screen)
             await pilot.pause()
-            assert screen.query_one("#collect-input", Input) is not None
+            assert screen.query_one("#collect-input", TextArea) is not None
 
     @pytest.mark.asyncio
     async def test_collect_with_default(self) -> None:
@@ -217,8 +217,8 @@ class TestCollectScreen:
             screen = CollectScreen(req)
             app.push_screen(screen)
             await pilot.pause()
-            inp = screen.query_one("#collect-input", Input)
-            assert inp.value == "John"
+            ta = screen.query_one("#collect-input", TextArea)
+            assert ta.text == "John"
 
     @pytest.mark.asyncio
     async def test_collect_cancel(self) -> None:
@@ -382,8 +382,8 @@ class TestCollectScreenValidation:
             screen = CollectScreen(req)
             app.push_screen(screen, callback=results.append)
             await pilot.pause()
-            inp = screen.query_one("#collect-input", Input)
-            inp.value = "my-slug"
+            ta = screen.query_one("#collect-input", TextArea)
+            ta.load_text("my-slug")
             await pilot.click("#submit")
             await pilot.pause()
 
@@ -406,8 +406,8 @@ class TestCollectScreenValidation:
             screen = CollectScreen(req)
             app.push_screen(screen, callback=results.append)
             await pilot.pause()
-            inp = screen.query_one("#collect-input", Input)
-            inp.value = "INVALID!"
+            ta = screen.query_one("#collect-input", TextArea)
+            ta.load_text("INVALID!")
             await pilot.click("#submit")
             await pilot.pause()
             # Should NOT have dismissed — validation failed
@@ -429,7 +429,7 @@ class TestCollectScreenValidation:
             assert ta is not None
 
     @pytest.mark.asyncio
-    async def test_collect_input_submit_via_enter(self) -> None:
+    async def test_collect_submit_via_ctrl_enter(self) -> None:
         app = _TestApp(hitl_queue=HITLQueue())
         results: list[Any] = []
 
@@ -438,10 +438,10 @@ class TestCollectScreenValidation:
             screen = CollectScreen(req)
             app.push_screen(screen, callback=results.append)
             await pilot.pause()
-            inp = screen.query_one("#collect-input", Input)
-            inp.value = "test-value"
-            inp.focus()
-            await pilot.press("enter")
+            ta = screen.query_one("#collect-input", TextArea)
+            ta.load_text("test-value")
+            ta.focus()
+            await pilot.press("ctrl+j")
             await pilot.pause()
 
         assert results == ["test-value"]

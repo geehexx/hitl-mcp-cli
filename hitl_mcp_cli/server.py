@@ -7,7 +7,7 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
 
 from .interaction_log import ResultType, log_interaction
 from .ui import display_notification, prompt_checkbox, prompt_confirm, prompt_path, prompt_select, prompt_text
@@ -17,6 +17,21 @@ if TYPE_CHECKING:
     from .tui.queue import HITLQueue
 
 logger = logging.getLogger(__name__)
+
+
+def _get_client_name(ctx: Context | None) -> str | None:
+    """Extract client name from FastMCP Context, if available."""
+    if ctx is None:
+        return None
+    try:
+        session = ctx.session
+        params = session.client_params
+        if params and params.clientInfo:
+            return params.clientInfo.name
+    except Exception:
+        pass
+    return None
+
 
 _tui_queue: HITLQueue | None = None
 _tui_app: HITLApp | None = None
@@ -28,8 +43,15 @@ def configure_tui_mode(queue: HITLQueue, app: HITLApp) -> None:
     _tui_queue, _tui_app = queue, app
 
 
-async def _tui_enqueue(tool: str, params: dict[str, Any]) -> Any:
-    """Enqueue a request on the TUI queue and await the user's response."""
+async def _tui_enqueue(tool: str, params: dict[str, Any], client_name: str | None = None) -> Any:
+    """Enqueue a request on the TUI queue and await the user's response.
+
+    The queue's asyncio.PriorityQueue lives on the Textual event loop, so
+    we use put_threadsafe() to schedule the enqueue on the correct loop
+    (HTTP/uvicorn thread → Textual loop direction).  The future is created
+    on the uvicorn loop and resolved back via call_soon_threadsafe
+    (Textual → uvicorn direction) in HITLQueue.resolve().
+    """
     import threading
 
     from .tui.queue import HITLRequest
@@ -39,15 +61,26 @@ async def _tui_enqueue(tool: str, params: dict[str, Any]) -> Any:
     if _tui_queue._caller_loop is None:
         _tui_queue.set_caller_loop(loop)
     future: asyncio.Future[Any] = loop.create_future()
+
+    # Inject session metadata so the queue worker can display it
+    session_id = f"thread-{threading.current_thread().ident}"
+    params = {**params, "_session_id": session_id, "_client_name": client_name or "unknown"}
+
     request = HITLRequest(tool=tool, params=params, future=future)
-    await _tui_queue.put(request)
+
+    # Enqueue on the Textual event loop (owns the asyncio.PriorityQueue)
+    _tui_queue.put_threadsafe(request)
 
     if _tui_app is not None:
         project_id = params.get("project_id")
-        session_id = f"thread-{threading.current_thread().ident}"
-        _tui_app.call_from_thread(_tui_app.record_session_activity, session_id, tool, project_id)
+        _tui_app.call_from_thread(_tui_app.record_session_activity, session_id, tool, project_id, client_name)
 
-    return await future
+    result = await future
+
+    if _tui_app is not None:
+        _tui_app.call_from_thread(_tui_app.record_session_resolved, session_id)
+
+    return result
 
 
 mcp = FastMCP(
@@ -68,6 +101,7 @@ async def hitl_collect(
     validation_pattern: str | None = None,
     validation_message: str | None = None,
     notes: str | None = None,
+    ctx: Context | None = None,
 ) -> str | dict[str, str]:
     """Collect a single input value from the user. Use for text, file paths, or multiline content. Blocks until the user responds.
 
@@ -92,7 +126,9 @@ async def hitl_collect(
                 "default": default,
                 "validation_pattern": validation_pattern,
                 "validation_message": validation_message,
+                "notes": notes,
             },
+            client_name=_get_client_name(ctx),
         )
     else:
         result = await _collect_input(
@@ -112,6 +148,7 @@ async def hitl_ask(
     validation_pattern: str | None = None,
     validation_message: str | None = None,
     notes: str | None = None,
+    ctx: Context | None = None,
 ) -> str | dict[str, str]:
     """Alias for hitl_collect. Collect a single input value from the user."""
     t0 = time.monotonic()
@@ -124,7 +161,9 @@ async def hitl_ask(
                 "default": default,
                 "validation_pattern": validation_pattern,
                 "validation_message": validation_message,
+                "notes": notes,
             },
+            client_name=_get_client_name(ctx),
         )
     else:
         result = await _collect_input(
@@ -168,6 +207,7 @@ async def hitl_choose(
     default: str | None = None,
     fuzzy_search: bool | None = None,
     notes: str | None = None,
+    ctx: Context | None = None,
 ) -> str | list[str] | dict[str, str] | dict[str, Any]:
     """Present a list of options for the user to select from. Supports single or multiple selection, fuzzy search for long lists, and rich option descriptions.
 
@@ -209,7 +249,9 @@ async def hitl_choose(
                 "message": message,
                 "choices": choices,
                 "multiple": multiple,
+                "notes": notes,
             },
+            client_name=_get_client_name(ctx),
         )
         ms = int((time.monotonic() - t0) * 1000)
         log_interaction("hitl_choose", ms, "value", message=message, result=str(result)[:80], notes=notes)
@@ -254,6 +296,7 @@ async def hitl_confirm(
     context: str | None = None,
     timeout_seconds: int = 0,
     notes: str | None = None,
+    ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Ask the user to confirm or reject an action. Use severity='high' for destructive or irreversible operations.
 
@@ -276,11 +319,12 @@ async def hitl_confirm(
             "message": message,
             "severity": severity,
             "context": context,
+            "notes": notes,
         }
         try:
             if timeout_seconds > 0:
                 tui_result: dict[str, Any] = await asyncio.wait_for(
-                    _tui_enqueue("hitl_confirm", tui_params),
+                    _tui_enqueue("hitl_confirm", tui_params, client_name=_get_client_name(ctx)),
                     timeout=timeout_seconds,
                 )
                 ms = int((time.monotonic() - t0) * 1000)
@@ -289,11 +333,16 @@ async def hitl_confirm(
                 )
                 tui_result["timed_out"] = False
                 return tui_result
-            tui_result = await _tui_enqueue("hitl_confirm", tui_params)
+            tui_result = await _tui_enqueue("hitl_confirm", tui_params, client_name=_get_client_name(ctx))
             ms = int((time.monotonic() - t0) * 1000)
             log_interaction("hitl_confirm", ms, "value", message=message, result=str(tui_result), notes=notes)
             return tui_result
         except TimeoutError:
+            if _tui_app is not None:
+                import threading
+
+                session_id = f"thread-{threading.current_thread().ident}"
+                _tui_app.call_from_thread(_tui_app.record_session_resolved, session_id)
             ms = int((time.monotonic() - t0) * 1000)
             log_interaction("hitl_confirm", ms, "timeout", message=message, notes=notes)
             return {"action": "decline", "timed_out": True}
@@ -346,6 +395,7 @@ async def hitl_notify(
     level: Literal["success", "info", "warning", "error"] = "info",
     title: str | None = None,
     notes: str | None = None,
+    ctx: Context | None = None,
 ) -> dict[str, bool]:
     """Display a styled notification to the user. Non-blocking — does not wait for user input. Use for progress updates, completion notices, and status changes.
 
@@ -361,11 +411,22 @@ async def hitl_notify(
     t0 = time.monotonic()
 
     if _tui_queue is not None and _tui_app is not None:
+        client_name = _get_client_name(ctx)
         _tui_app.call_from_thread(_tui_app.stream_output, title or "agent", message, level)
         import threading
 
         session_id = f"thread-{threading.current_thread().ident}"
-        _tui_app.call_from_thread(_tui_app.record_session_activity, session_id, "hitl_notify", None)
+        _tui_app.call_from_thread(
+            _tui_app.record_session_activity, session_id, "hitl_notify", None, client_name
+        )
+        # Log notify with params in activity log
+        short_msg = message[:40] + "..." if len(message) > 40 else message
+        _tui_app.call_from_thread(
+            _tui_app.stream_output,
+            "queue",
+            f"▶ [bold]hitl_notify[/bold] \\[{client_name or 'unknown'}] — {short_msg}",
+            "info",
+        )
         ms = int((time.monotonic() - t0) * 1000)
         log_interaction("hitl_notify", ms, "value", message=message, notes=notes)
         return {"acknowledged": True}
