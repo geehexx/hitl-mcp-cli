@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import itertools
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -60,9 +61,10 @@ class HITLQueue:
     priority, FIFO ordering is maintained via a monotonic sequence number.
     """
 
+    _seq: itertools.count[int] = itertools.count(1)
+
     def __init__(self) -> None:
         self._queue: asyncio.PriorityQueue[tuple[int, int, HITLRequest]] = asyncio.PriorityQueue()
-        self._seq: int = 0
         self._caller_loop: asyncio.AbstractEventLoop | None = None
         self._textual_loop: asyncio.AbstractEventLoop | None = None
 
@@ -76,8 +78,8 @@ class HITLQueue:
 
     async def put(self, request: HITLRequest) -> None:
         """Enqueue a request. The sequence number breaks priority ties (FIFO)."""
-        self._seq += 1
-        await self._queue.put((request.priority, self._seq, request))
+        seq = next(HITLQueue._seq)
+        await self._queue.put((request.priority, seq, request))
 
     def put_threadsafe(self, request: HITLRequest) -> None:
         """Enqueue from a foreign thread (HTTP/uvicorn → Textual direction).
@@ -85,8 +87,7 @@ class HITLQueue:
         Schedules put_nowait on the Textual event loop via
         call_soon_threadsafe.  Safe for unbounded PriorityQueue.
         """
-        self._seq += 1
-        seq = self._seq
+        seq = next(HITLQueue._seq)
         item = (request.priority, seq, request)
         loop = self._textual_loop
         if loop is not None and loop.is_running():

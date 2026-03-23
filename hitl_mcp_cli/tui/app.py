@@ -341,6 +341,7 @@ class HITLApp(App[None]):
                         while result == _MINIMIZED:
                             result = await self.push_screen_wait(screen)
                             if result == _MINIMIZED:
+                                self._restore_event = asyncio.Event()
                                 self._pending_screen = screen
                                 self.notify(
                                     "Prompt minimized — press Escape to restore",

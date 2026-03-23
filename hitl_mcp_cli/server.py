@@ -310,7 +310,7 @@ async def hitl_confirm(
 
     Returns:
         Dict with 'action': 'accept' (confirmed), 'decline' (rejected), or 'cancel' (Ctrl+C).
-        When timeout_seconds > 0, also includes 'timed_out' (bool).
+        Always includes 'timed_out' (bool) — True only when timeout_seconds > 0 and the timeout expired.
     """
     t0 = time.monotonic()
 
@@ -336,6 +336,7 @@ async def hitl_confirm(
             tui_result = await _tui_enqueue("hitl_confirm", tui_params, client_name=_get_client_name(ctx))
             ms = int((time.monotonic() - t0) * 1000)
             log_interaction("hitl_confirm", ms, "value", message=message, result=str(tui_result), notes=notes)
+            tui_result.setdefault("timed_out", False)
             return tui_result
         except TimeoutError:
             if _tui_app is not None:
@@ -378,13 +379,11 @@ async def hitl_confirm(
         confirmed = await _do_confirm()
         ms = int((time.monotonic() - t0) * 1000)
         log_interaction("hitl_confirm", ms, "value", message=message, result=str(confirmed), notes=notes)
-        return {"action": "accept" if confirmed else "decline"}
+        return {"action": "accept" if confirmed else "decline", "timed_out": False}
     except KeyboardInterrupt:
         ms = int((time.monotonic() - t0) * 1000)
         log_interaction("hitl_confirm", ms, "cancel", message=message, notes=notes)
-        if timeout_seconds > 0:
-            return {"action": "cancel", "timed_out": False}
-        return {"action": "cancel"}
+        return {"action": "cancel", "timed_out": False}
     except Exception as e:
         raise Exception(f"Confirmation failed: {str(e)}") from e
 

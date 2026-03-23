@@ -18,6 +18,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
+from textual.validation import Regex
 from textual.widgets import Button, Input, Label, Markdown, OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 
@@ -176,6 +177,11 @@ class CollectScreen(Screen[str | dict[str, str]]):
         Binding("ctrl+j", "submit", "Submit (Ctrl+Enter)", show=True),
     ]
 
+    _PLACEHOLDERS: dict[str, str] = {
+        "text": "Type your response...",
+        "path": "Enter file path...",
+    }
+
     DEFAULT_CSS = (
         """
     CollectScreen {
@@ -198,6 +204,25 @@ class CollectScreen(Screen[str | dict[str, str]]):
         max-height: 8;
         margin-top: 1;
         margin-bottom: 1;
+    }
+    .prompt-row {
+        height: 1;
+        width: 1fr;
+    }
+    .prompt-icon {
+        width: auto;
+    }
+    #collect-input.-valid {
+        border: tall $success 60%;
+    }
+    #collect-input.-valid:focus {
+        border: tall $success;
+    }
+    #collect-input.-invalid {
+        border: tall $error 60%;
+    }
+    #collect-input.-invalid:focus {
+        border: tall $error;
     }
     .validation-error {
         color: red;
@@ -226,15 +251,38 @@ class CollectScreen(Screen[str | dict[str, str]]):
         self._validation_pattern: str | None = request.params.get("validation_pattern")
         self._validation_message: str | None = request.params.get("validation_message")
         self._notes: str | None = request.params.get("notes")
+        self._is_multiline: bool = self._input_type == "multiline"
 
     def compose(self) -> ComposeResult:
         """Compose the collection dialog UI."""
         with Vertical(id="collect-dialog"):
-            yield Static(self._message)
+            if self._is_multiline:
+                yield Static(self._message)
+            else:
+                with Horizontal(classes="prompt-row"):
+                    yield Static("[bold cyan]❯[/bold cyan] ", classes="prompt-icon")
+                    yield Static(self._message)
             notes_w = _notes_widget(self._notes)
             if notes_w:
                 yield notes_w
-            yield TextArea(self._default_val or "", id="collect-input")
+            if self._is_multiline:
+                yield TextArea(self._default_val or "", id="collect-input")
+            else:
+                validators = []
+                if self._validation_pattern:
+                    validators.append(
+                        Regex(
+                            self._validation_pattern,
+                            failure_description=self._validation_message or "Invalid input",
+                        )
+                    )
+                yield Input(
+                    value=self._default_val or "",
+                    placeholder=self._PLACEHOLDERS.get(self._input_type, "Type your response..."),
+                    id="collect-input",
+                    validators=validators,
+                    validate_on=["submitted"],
+                )
             yield Label(
                 self._validation_message or "Invalid input",
                 classes="validation-error",
@@ -246,7 +294,9 @@ class CollectScreen(Screen[str | dict[str, str]]):
 
     def _get_value(self) -> str:
         """Get the current input value from the widget."""
-        return self.query_one("#collect-input", TextArea).text
+        if self._is_multiline:
+            return self.query_one("#collect-input", TextArea).text
+        return self.query_one("#collect-input", Input).value
 
     def _validate(self, value: str) -> bool:
         """Validate input against the validation pattern."""
@@ -256,6 +306,16 @@ class CollectScreen(Screen[str | dict[str, str]]):
             except re.error:
                 return False
         return True
+
+    @on(Input.Submitted, "#collect-input")
+    def _on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle Enter key submission from Input widget."""
+        if event.validation_result and not event.validation_result.is_valid:
+            msg = self.query_one("#validation-msg", Label)
+            msg.update(event.validation_result.failure_descriptions[0])
+            msg.add_class("visible")
+            return
+        self.dismiss(event.value)
 
     @on(Button.Pressed, "#submit")
     def _on_submit(self) -> None:

@@ -203,7 +203,7 @@ class TestToolExecution:
             )
 
             assert result is not None
-            assert result.data == {"action": "accept"}
+            assert result.data == {"action": "accept", "timed_out": False}
             assert not result.is_error
 
     @pytest.mark.asyncio
@@ -217,7 +217,7 @@ class TestToolExecution:
             )
 
             assert result is not None
-            assert result.data == {"action": "decline"}
+            assert result.data == {"action": "decline", "timed_out": False}
             assert not result.is_error
 
     @pytest.mark.asyncio
@@ -234,7 +234,7 @@ class TestToolExecution:
             )
 
             assert result is not None
-            assert result.data == {"action": "accept"}
+            assert result.data == {"action": "accept", "timed_out": False}
             assert not result.is_error
 
     @pytest.mark.asyncio
@@ -251,7 +251,7 @@ class TestToolExecution:
             )
 
             assert result is not None
-            assert result.data == {"action": "decline"}
+            assert result.data == {"action": "decline", "timed_out": False}
             assert not result.is_error
 
     @pytest.mark.asyncio
@@ -263,7 +263,7 @@ class TestToolExecution:
             result = await mcp_client.call_tool("hitl_confirm", {"message": "Continue?", "severity": "low"})
 
             assert result is not None
-            assert result.data == {"action": "accept"}
+            assert result.data == {"action": "accept", "timed_out": False}
             # severity=low should pass default=True
             mock_confirm.assert_called_once_with("Continue?", default=True, notes=None)
 
@@ -313,7 +313,7 @@ class TestToolExecution:
             )
 
             assert result is not None
-            assert result.data == {"action": "accept"}
+            assert result.data == {"action": "accept", "timed_out": False}
             # Should display context in notification
             call_args = mock_notify.call_args[0]
             assert "Version 2.0" in call_args[1]
@@ -333,7 +333,7 @@ class TestToolExecution:
             )
 
             assert result is not None
-            assert result.data == {"action": "decline"}
+            assert result.data == {"action": "decline", "timed_out": False}
 
     @pytest.mark.asyncio
     async def test_hitl_ask_execution(self, mcp_client: Client) -> None:

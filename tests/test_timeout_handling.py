@@ -123,7 +123,7 @@ async def test_multiple_sequential_calls(mcp_client: Client) -> None:
 
         assert result1.data == "Test Input"
         assert result2.data == "Option A"
-        assert result3.data == {"action": "accept"}
+        assert result3.data == {"action": "accept", "timed_out": False}
 
 
 @pytest.mark.asyncio

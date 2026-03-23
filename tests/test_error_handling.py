@@ -72,7 +72,7 @@ async def test_hitl_confirm_keyboard_interrupt(mcp_client: Client) -> None:
         result = await mcp_client.call_tool("hitl_confirm", {"message": "Proceed?"})
 
         assert result is not None
-        assert result.data == {"action": "cancel"}
+        assert result.data == {"action": "cancel", "timed_out": False}
 
 
 @pytest.mark.asyncio

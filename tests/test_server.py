@@ -163,7 +163,7 @@ async def test_hitl_confirm_tool(mcp_client: Client) -> None:
         )
 
         assert result is not None
-        assert result.data == {"action": "accept"}
+        assert result.data == {"action": "accept", "timed_out": False}
         mock_confirm.assert_called_once_with("Do you want to continue?", False, notes=None)
 
 
@@ -182,7 +182,7 @@ async def test_hitl_confirm_with_context(mcp_client: Client) -> None:
         )
 
         assert result is not None
-        assert result.data == {"action": "accept"}
+        assert result.data == {"action": "accept", "timed_out": False}
         mock_notify.assert_called_once_with("Context", "Version 2.0 to production", "info")
 
 

@@ -94,7 +94,7 @@ class TestHitlConfirmTuiMode:
         task = asyncio.create_task(resolve_next())
         result = await _hitl_confirm(message="Proceed?")
         await task
-        assert result == {"action": "accept"}
+        assert result == {"action": "accept", "timed_out": False}
 
     @pytest.mark.asyncio
     async def test_confirm_timeout_in_tui_mode(self) -> None:
