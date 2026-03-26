@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any, ClassVar
 
 import pytest
-from textual.widgets import Button, Input, Label, OptionList, RichLog, TextArea
+from textual.widgets import Button, DataTable, Input, Label, OptionList, RichLog, TextArea
 
-from hitl_mcp_cli.tui.app import HITLApp
+from hitl_mcp_cli.tui.app import HITLApp, _queue_status_text, _session_style
 from hitl_mcp_cli.tui.queue import HITLQueue, HITLRequest
 from hitl_mcp_cli.tui.screens import ChooseScreen, CollectScreen, ConfirmScreen, NotifyScreen, screen_for
 
@@ -570,3 +571,344 @@ class TestNotifyScreenNewlineAndMarkdown:
             app.push_screen(screen)
             await pilot.pause()
             assert screen._title_text == "Title\nSubtitle"
+
+
+# ---------------------------------------------------------------------------
+# Pure unit tests for module-level helpers (lines 44-59)
+# ---------------------------------------------------------------------------
+
+
+class TestSessionStyle:
+    def test_active_session(self) -> None:
+        ts = time.monotonic()  # just now → age < 600s
+        assert _session_style(ts) == "bold bright_white"
+
+    def test_idle_session(self) -> None:
+        ts = time.monotonic() - 1200  # 20 min ago → 600 < age < 3600
+        assert _session_style(ts) == "white"
+
+    def test_old_session(self) -> None:
+        ts = time.monotonic() - 7200  # 2 hours ago → age > 3600
+        assert _session_style(ts) == "dim"
+
+
+class TestQueueStatusText:
+    def test_pending(self) -> None:
+        t = _queue_status_text("pending")
+        assert "PENDING" in t.plain
+
+    def test_answered(self) -> None:
+        t = _queue_status_text("answered")
+        assert "DONE" in t.plain
+
+    def test_cancelled(self) -> None:
+        t = _queue_status_text("cancelled")
+        assert "CANCEL" in t.plain
+
+    def test_minimized(self) -> None:
+        t = _queue_status_text("minimized")
+        assert "PAUSED" in t.plain
+
+    def test_unknown_status(self) -> None:
+        t = _queue_status_text("foobar")
+        assert t.plain == "foobar"
+
+
+# ---------------------------------------------------------------------------
+# _update_queue_row_status with answer_preview (lines 528-533)
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateQueueRowStatus:
+    @pytest.mark.asyncio
+    async def test_status_update_with_answer_preview(self) -> None:
+        app = _TestApp(hitl_queue=HITLQueue())
+        async with app.run_test(size=(120, 40)) as pilot:
+            req = _make_request("hitl_confirm", {"message": "ok?"})
+            app.add_queue_row(req.request_id, req.tool, "ok?", request=req)
+            await pilot.pause()
+            # Call with answer_preview — covers the answer_preview branch
+            app._update_queue_row_status(req.request_id, "answered", "accepted")
+            await pilot.pause()
+            table = app.query_one("#queue-table", DataTable)
+            assert table.row_count == 1
+
+    @pytest.mark.asyncio
+    async def test_status_update_unknown_row_is_silent(self) -> None:
+        """Updating a non-existent row should not raise (exception pass)."""
+        app = _TestApp(hitl_queue=HITLQueue())
+        async with app.run_test(size=(120, 40)) as _pilot:
+            # No row added — should silently pass
+            app._update_queue_row_status("nonexistent-id", "cancelled", "")
+
+
+# ---------------------------------------------------------------------------
+# record_session_resolved (lines 325-333)
+# ---------------------------------------------------------------------------
+
+
+class TestRecordSessionResolved:
+    @pytest.mark.asyncio
+    async def test_resolved_unknown_session_is_noop(self) -> None:
+        app = _TestApp(hitl_queue=HITLQueue())
+        async with app.run_test(size=(120, 40)) as _pilot:
+            # Should return early without error
+            app.record_session_resolved("nonexistent-session")
+
+    @pytest.mark.asyncio
+    async def test_resolved_decrements_pending(self) -> None:
+        app = _TestApp(hitl_queue=HITLQueue())
+        async with app.run_test(size=(120, 40)) as pilot:
+            app.record_session_activity("sess-1", "hitl_confirm", client_name="agent")
+            await pilot.pause()
+            assert app._sessions["sess-1"]["pending"] == 1
+            app.record_session_resolved("sess-1")
+            await pilot.pause()
+            assert app._sessions["sess-1"]["pending"] == 0
+            assert app._sessions["sess-1"]["completed"] == 1
+
+    @pytest.mark.asyncio
+    async def test_resolved_pending_floor_is_zero(self) -> None:
+        """Calling resolved twice should not go below 0."""
+        app = _TestApp(hitl_queue=HITLQueue())
+        async with app.run_test(size=(120, 40)) as pilot:
+            app.record_session_activity("sess-2", "hitl_confirm")
+            await pilot.pause()
+            app.record_session_resolved("sess-2")
+            app.record_session_resolved("sess-2")
+            await pilot.pause()
+            assert app._sessions["sess-2"]["pending"] == 0
+
+
+# ---------------------------------------------------------------------------
+# _update_elapsed (lines 277-282)
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateElapsed:
+    @pytest.mark.asyncio
+    async def test_update_elapsed_updates_cell(self) -> None:
+        app = _TestApp(hitl_queue=HITLQueue())
+        async with app.run_test(size=(120, 40)) as pilot:
+            req = _make_request("hitl_confirm", {"message": "timer test"})
+            app.add_queue_row(req.request_id, req.tool, "timer test", request=req)
+            await pilot.pause()
+            # Call directly — covers the loop body
+            app._update_elapsed()
+            await pilot.pause()
+            table = app.query_one("#queue-table", DataTable)
+            assert table.row_count == 1
+
+    @pytest.mark.asyncio
+    async def test_update_elapsed_empty_map_is_noop(self) -> None:
+        app = _TestApp(hitl_queue=HITLQueue())
+        async with app.run_test(size=(120, 40)) as _pilot:
+            # No rows — should not raise
+            app._update_elapsed()
+
+
+# ---------------------------------------------------------------------------
+# _rebuild_sessions_table with multiple sessions (lines 305-320)
+# ---------------------------------------------------------------------------
+
+
+class TestRebuildSessionsTable:
+    @pytest.mark.asyncio
+    async def test_multiple_sessions_sorted_by_recency(self) -> None:
+        app = _TestApp(hitl_queue=HITLQueue())
+        async with app.run_test(size=(120, 40)) as pilot:
+            app.record_session_activity("sess-a", "hitl_confirm", client_name="agent-a")
+            await pilot.pause()
+            app.record_session_activity("sess-b", "hitl_confirm", client_name="agent-b")
+            await pilot.pause()
+            table = app.query_one("#sessions-table", DataTable)
+            assert table.row_count == 2
+
+    @pytest.mark.asyncio
+    async def test_existing_session_updates_calls(self) -> None:
+        app = _TestApp(hitl_queue=HITLQueue())
+        async with app.run_test(size=(120, 40)) as pilot:
+            app.record_session_activity("sess-x", "hitl_confirm", client_name="agent-x")
+            await pilot.pause()
+            # Second call to same session — covers the else branch (lines 378-385)
+            app.record_session_activity(
+                "sess-x", "hitl_collect", project_id="proj-y", client_name="agent-x-v2"
+            )
+            await pilot.pause()
+            assert app._sessions["sess-x"]["calls"] == 2
+            assert app._sessions["sess-x"]["project_id"] == "proj-y"
+            assert app._sessions["sess-x"]["client_name"] == "agent-x-v2"
+
+
+# ---------------------------------------------------------------------------
+# _on_queue_row_selected — all status branches (lines 236-268)
+# ---------------------------------------------------------------------------
+
+
+class TestOnQueueRowSelected:
+    @pytest.mark.asyncio
+    async def test_row_selected_no_request_no_pending_screen(self) -> None:
+        """Row with no request map entry and no pending screen → notify."""
+        app = _TestApp(hitl_queue=HITLQueue())
+        async with app.run_test(size=(120, 40)) as pilot:
+            req = _make_request("hitl_confirm", {"message": "test"})
+            app.add_queue_row(req.request_id, req.tool, "test", request=req)
+            await pilot.pause()
+            table = app.query_one("#queue-table", DataTable)
+            # Remove from map so handler hits the "no request" branch
+            del app._queue_request_map[req.request_id]
+            row_key = table._row_locations.get_key(0)
+            event = DataTable.RowSelected(table, 0, row_key)
+            app._on_queue_row_selected(event)
+            await pilot.pause()
+
+    @pytest.mark.asyncio
+    async def test_row_selected_answered_status(self) -> None:
+        """Clicking an answered row shows answer preview notification."""
+        app = _TestApp(hitl_queue=HITLQueue())
+        async with app.run_test(size=(120, 40)) as pilot:
+            req = _make_request("hitl_confirm", {"message": "done"})
+            app.add_queue_row(req.request_id, req.tool, "done", request=req)
+            await pilot.pause()
+            app._hitl_queue.mark_answered(req.request_id, "accepted")
+            table = app.query_one("#queue-table", DataTable)
+            row_key = table._row_locations.get_key(0)
+            event = DataTable.RowSelected(table, 0, row_key)
+            app._on_queue_row_selected(event)
+            await pilot.pause()
+
+    @pytest.mark.asyncio
+    async def test_row_selected_cancelled_status(self) -> None:
+        """Clicking a cancelled row shows cancelled notification."""
+        app = _TestApp(hitl_queue=HITLQueue())
+        async with app.run_test(size=(120, 40)) as pilot:
+            req = _make_request("hitl_confirm", {"message": "gone"})
+            app.add_queue_row(req.request_id, req.tool, "gone", request=req)
+            await pilot.pause()
+            app._hitl_queue.mark_cancelled(req.request_id)
+            table = app.query_one("#queue-table", DataTable)
+            row_key = table._row_locations.get_key(0)
+            event = DataTable.RowSelected(table, 0, row_key)
+            app._on_queue_row_selected(event)
+            await pilot.pause()
+
+    @pytest.mark.asyncio
+    async def test_row_selected_pending_no_pending_screen(self) -> None:
+        """Clicking a pending row with no pending screen → 'already active' notify."""
+        app = _TestApp(hitl_queue=HITLQueue())
+        async with app.run_test(size=(120, 40)) as pilot:
+            req = _make_request("hitl_confirm", {"message": "active"})
+            app.add_queue_row(req.request_id, req.tool, "active", request=req)
+            await pilot.pause()
+            table = app.query_one("#queue-table", DataTable)
+            row_key = table._row_locations.get_key(0)
+            event = DataTable.RowSelected(table, 0, row_key)
+            app._on_queue_row_selected(event)
+            await pilot.pause()
+
+    @pytest.mark.asyncio
+    async def test_row_selected_minimized_no_pending_screen(self) -> None:
+        """Clicking a minimized row with no pending screen → 'not minimized' notify."""
+        app = _TestApp(hitl_queue=HITLQueue())
+        async with app.run_test(size=(120, 40)) as pilot:
+            req = _make_request("hitl_confirm", {"message": "paused"})
+            app.add_queue_row(req.request_id, req.tool, "paused", request=req)
+            await pilot.pause()
+            app._hitl_queue.mark_minimized(req.request_id)
+            table = app.query_one("#queue-table", DataTable)
+            row_key = table._row_locations.get_key(0)
+            event = DataTable.RowSelected(table, 0, row_key)
+            app._on_queue_row_selected(event)
+            await pilot.pause()
+
+    @pytest.mark.asyncio
+    async def test_row_selected_answered_no_preview(self) -> None:
+        """Answered row with no answer_preview shows '(no preview)'."""
+        app = _TestApp(hitl_queue=HITLQueue())
+        async with app.run_test(size=(120, 40)) as pilot:
+            req = _make_request("hitl_confirm", {"message": "done"})
+            app.add_queue_row(req.request_id, req.tool, "done", request=req)
+            await pilot.pause()
+            app._hitl_queue.mark_answered(req.request_id, "")
+            table = app.query_one("#queue-table", DataTable)
+            row_key = table._row_locations.get_key(0)
+            event = DataTable.RowSelected(table, 0, row_key)
+            app._on_queue_row_selected(event)
+            await pilot.pause()
+
+
+# ---------------------------------------------------------------------------
+# action_restore_prompt with pending screen set (lines 220-222)
+# ---------------------------------------------------------------------------
+
+
+class TestActionRestorePrompt:
+    @pytest.mark.asyncio
+    async def test_restore_prompt_with_pending_screen(self) -> None:
+        """action_restore_prompt clears _pending_screen and sets event."""
+        from unittest.mock import MagicMock
+
+        app = _TestApp(hitl_queue=HITLQueue())
+        async with app.run_test(size=(120, 40)) as pilot:
+            mock_screen = MagicMock()
+            app._pending_screen = mock_screen
+            app._restore_event = asyncio.Event()
+            app.action_restore_prompt()
+            await pilot.pause()
+            assert app._pending_screen is None
+            assert app._restore_event.is_set()
+
+    @pytest.mark.asyncio
+    async def test_restore_prompt_without_pending_screen(self) -> None:
+        """action_restore_prompt with no pending screen is a no-op."""
+        app = _TestApp(hitl_queue=HITLQueue())
+        async with app.run_test(size=(120, 40)) as pilot:
+            assert app._pending_screen is None
+            app.action_restore_prompt()
+            await pilot.pause()
+            assert app._pending_screen is None
+
+
+# ---------------------------------------------------------------------------
+# stream_output level filtering (line 370)
+# ---------------------------------------------------------------------------
+
+
+class TestStreamOutputFiltering:
+    @pytest.mark.asyncio
+    async def test_debug_filtered_at_info_level(self) -> None:
+        """DEBUG messages should be filtered when min_level is INFO."""
+        app = _TestApp(hitl_queue=HITLQueue())
+        async with app.run_test(size=(120, 40)) as pilot:
+            app.min_level = "INFO"
+            log = app.query_one("#output-log", RichLog)
+            line_count_before = len(log.lines)
+            app.stream_output("agent", "debug message", "debug")
+            await pilot.pause()
+            # Line count should not increase (filtered out)
+            assert len(log.lines) == line_count_before
+
+    @pytest.mark.asyncio
+    async def test_warning_passes_at_info_level(self) -> None:
+        """WARNING messages should pass through when min_level is INFO."""
+        app = _TestApp(hitl_queue=HITLQueue())
+        async with app.run_test(size=(120, 40)) as pilot:
+            app.min_level = "INFO"
+            log = app.query_one("#output-log", RichLog)
+            line_count_before = len(log.lines)
+            app.stream_output("agent", "warning message", "warning")
+            await pilot.pause()
+            assert len(log.lines) > line_count_before
+
+    @pytest.mark.asyncio
+    async def test_stream_output_markdown_path(self) -> None:
+        """Messages with markdown syntax should use RichMarkdown renderer (line 372)."""
+        app = _TestApp(hitl_queue=HITLQueue())
+        async with app.run_test(size=(120, 40)) as pilot:
+            app.min_level = "DEBUG"
+            log = app.query_one("#output-log", RichLog)
+            line_count_before = len(log.lines)
+            # Markdown-like content triggers _has_markdown
+            app.stream_output("agent", "# Header\n\n- item1\n- item2", "info")
+            await pilot.pause()
+            assert len(log.lines) > line_count_before
