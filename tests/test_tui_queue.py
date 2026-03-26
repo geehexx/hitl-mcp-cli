@@ -164,3 +164,91 @@ class TestHITLQueue:
 
         await asyncio.gather(producer("a"), producer("b"), producer("c"))
         assert queue.size == 3
+
+
+# --- Queue history invariants ---
+
+
+class TestQueueHistoryInvariants:
+    @pytest.mark.asyncio
+    async def test_history_never_empty_after_put(self) -> None:
+        queue = HITLQueue()
+        loop = asyncio.get_event_loop()
+        req = HITLRequest(tool="confirm", params={}, future=loop.create_future())
+        await queue.put(req)
+        assert len(queue.history) >= 1
+
+    @pytest.mark.asyncio
+    async def test_history_grows_monotonically(self) -> None:
+        queue = HITLQueue()
+        loop = asyncio.get_event_loop()
+        for i in range(5):
+            req = HITLRequest(tool=f"tool-{i}", params={}, future=loop.create_future())
+            await queue.put(req)
+            assert len(queue.history) == i + 1
+
+    @pytest.mark.asyncio
+    async def test_get_by_id_returns_correct_request(self) -> None:
+        queue = HITLQueue()
+        loop = asyncio.get_event_loop()
+        req = HITLRequest(tool="confirm", params={"message": "hi"}, future=loop.create_future())
+        await queue.put(req)
+        found = queue.get_by_id(req.request_id)
+        assert found is req
+
+    @pytest.mark.asyncio
+    async def test_get_by_id_unknown_returns_none(self) -> None:
+        queue = HITLQueue()
+        assert queue.get_by_id("nonexistent-id") is None
+
+    @pytest.mark.asyncio
+    async def test_mark_answered_updates_status(self) -> None:
+        queue = HITLQueue()
+        loop = asyncio.get_event_loop()
+        req = HITLRequest(tool="confirm", params={}, future=loop.create_future())
+        await queue.put(req)
+        queue.mark_answered(req.request_id, "accepted")
+        assert req.status == "answered"
+        assert req.answer_preview == "accepted"
+
+    @pytest.mark.asyncio
+    async def test_mark_cancelled_updates_status(self) -> None:
+        queue = HITLQueue()
+        loop = asyncio.get_event_loop()
+        req = HITLRequest(tool="confirm", params={}, future=loop.create_future())
+        await queue.put(req)
+        queue.mark_cancelled(req.request_id)
+        assert req.status == "cancelled"
+
+    @pytest.mark.asyncio
+    async def test_mark_minimized_updates_status(self) -> None:
+        queue = HITLQueue()
+        loop = asyncio.get_event_loop()
+        req = HITLRequest(tool="confirm", params={}, future=loop.create_future())
+        await queue.put(req)
+        queue.mark_minimized(req.request_id)
+        assert req.status == "minimized"
+
+    @pytest.mark.asyncio
+    async def test_history_preserved_after_get(self) -> None:
+        """History is never removed even after dequeuing."""
+        queue = HITLQueue()
+        loop = asyncio.get_event_loop()
+        req = HITLRequest(tool="confirm", params={}, future=loop.create_future())
+        await queue.put(req)
+        await queue.get()
+        assert len(queue.history) == 1
+        assert queue.get_by_id(req.request_id) is req
+
+    @pytest.mark.asyncio
+    async def test_priority_ordering_maintained(self) -> None:
+        queue = HITLQueue()
+        loop = asyncio.get_event_loop()
+        r_low = HITLRequest(tool="low", params={}, future=loop.create_future(), priority=10)
+        r_high = HITLRequest(tool="high", params={}, future=loop.create_future(), priority=0)
+        await queue.put(r_low)
+        await queue.put(r_high)
+        first = await queue.get()
+        assert first.tool == "high"
+        second = await queue.get()
+        assert second.tool == "low"

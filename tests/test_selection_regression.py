@@ -1,232 +1,88 @@
-"""Regression tests for selection tools."""
-
-from unittest.mock import AsyncMock, MagicMock, patch
+"""Regression tests for selection tools via TUI queue."""
 
 import pytest
 from fastmcp import Client
 
-from hitl_mcp_cli.server import mcp
+from hitl_mcp_cli.server import configure_tui_mode, mcp
+from hitl_mcp_cli.tui.queue import HITLQueue
 
 
 @pytest.fixture
-async def mcp_client() -> Client:
+async def tui_queue() -> HITLQueue:
+    """Create a TUI queue and configure the server to use it."""
+    queue = HITLQueue()
+    configure_tui_mode(queue, None)  # type: ignore[arg-type]
+    yield queue
+    # Reset
+    configure_tui_mode(None, None)  # type: ignore[arg-type]
+
+
+@pytest.fixture
+async def mcp_client(tui_queue: HITLQueue) -> Client:
     """Create MCP client connected to the interactive server."""
     async with Client(mcp) as client:
         yield client
 
 
 @pytest.mark.asyncio
-async def test_hitl_choose_short_list(mcp_client: Client) -> None:
-    """Test selection with short list uses select prompt."""
-    with patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock:
-        mock.return_value = "Option B"
+async def test_hitl_choose_short_list(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Test selection with short list routes through TUI queue."""
 
-        result = await mcp_client.call_tool(
-            "hitl_choose",
-            {
-                "message": "Choose an option:",
-                "choices": ["Option A", "Option B", "Option C"],
-                "default": "Option A",
-                "multiple": False,
-            },
-        )
+    async def _auto_resolve() -> None:
+        req = await tui_queue.get()
+        tui_queue.resolve(req, "Option B")
 
-        assert result is not None
-        assert result.data == "Option B"
-        mock.assert_called_once_with(
-            "Choose an option:", ["Option A", "Option B", "Option C"], "Option A", None
-        )
+    import asyncio
 
+    task = asyncio.create_task(_auto_resolve())
 
-@pytest.mark.asyncio
-async def test_hitl_choose_long_list(mcp_client: Client) -> None:
-    """Test selection with long list (>15 items) uses fuzzy search."""
-    long_choices = [f"Option {i}" for i in range(20)]
+    result = await mcp_client.call_tool(
+        "hitl_choose",
+        {
+            "message": "Choose an option:",
+            "choices": ["Option A", "Option B", "Option C"],
+            "default": "Option A",
+            "multiple": False,
+        },
+    )
+    await task
 
-    with patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock:
-        mock.return_value = "Option 10"
-
-        result = await mcp_client.call_tool(
-            "hitl_choose",
-            {
-                "message": "Choose from many options:",
-                "choices": long_choices,
-                "multiple": False,
-            },
-        )
-
-        assert result is not None
-        assert result.data == "Option 10"
-        mock.assert_called_once_with("Choose from many options:", long_choices, None, None)
+    assert result is not None
+    assert result.data == "Option B"
 
 
 @pytest.mark.asyncio
-async def test_hitl_choose_multiple(mcp_client: Client) -> None:
-    """Test multiple selection uses checkbox prompt."""
-    with patch("hitl_mcp_cli.server.prompt_checkbox", new_callable=AsyncMock) as mock:
-        mock.return_value = ["Option A", "Option C"]
+async def test_hitl_choose_multiple(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Test multiple selection routes through TUI queue."""
+    import asyncio
 
-        result = await mcp_client.call_tool(
-            "hitl_choose",
-            {
-                "message": "Choose multiple:",
-                "choices": ["Option A", "Option B", "Option C"],
-                "multiple": True,
-            },
-        )
+    async def _auto_resolve() -> None:
+        req = await tui_queue.get()
+        tui_queue.resolve(req, ["Option A", "Option C"])
 
-        assert result is not None
-        assert result.data == ["Option A", "Option C"]
-        mock.assert_called_once_with("Choose multiple:", ["Option A", "Option B", "Option C"], None)
+    task = asyncio.create_task(_auto_resolve())
 
+    result = await mcp_client.call_tool(
+        "hitl_choose",
+        {
+            "message": "Choose multiple:",
+            "choices": ["Option A", "Option B", "Option C"],
+            "multiple": True,
+        },
+    )
+    await task
 
-@pytest.mark.asyncio
-async def test_prompt_select_short_list_uses_select() -> None:
-    """Test prompt_select with ≤15 items uses inquirer.select."""
-    from hitl_mcp_cli.ui.prompts import prompt_select
-
-    with patch("hitl_mcp_cli.ui.prompts.inquirer.select") as mock_select:
-        mock_result = MagicMock()
-        mock_result.execute.return_value = "Choice 5"
-        mock_select.return_value = mock_result
-
-        choices = [f"Choice {i}" for i in range(15)]
-        result = await prompt_select("Select one:", choices)
-
-        assert result == "Choice 5"
-        mock_select.assert_called_once()
-        assert mock_select.call_count == 1
+    assert result is not None
+    assert result.data == ["Option A", "Option C"]
 
 
 @pytest.mark.asyncio
-async def test_prompt_select_long_list_uses_fuzzy() -> None:
-    """Test prompt_select with >15 items uses inquirer.fuzzy."""
-    from hitl_mcp_cli.ui.prompts import prompt_select
-
-    with patch("hitl_mcp_cli.ui.prompts.inquirer.fuzzy") as mock_fuzzy:
-        mock_result = MagicMock()
-        mock_result.execute.return_value = "Choice 20"
-        mock_fuzzy.return_value = mock_result
-
-        choices = [f"Choice {i}" for i in range(20)]
-        result = await prompt_select("Select one:", choices)
-
-        assert result == "Choice 20"
-        mock_fuzzy.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_prompt_select_exactly_15_uses_select() -> None:
-    """Test prompt_select with exactly 15 items uses select (boundary test)."""
-    from hitl_mcp_cli.ui.prompts import prompt_select
-
-    with patch("hitl_mcp_cli.ui.prompts.inquirer.select") as mock_select:
-        mock_result = MagicMock()
-        mock_result.execute.return_value = "Choice 15"
-        mock_select.return_value = mock_result
-
-        choices = [f"Choice {i}" for i in range(15)]
-        result = await prompt_select("Select one:", choices)
-
-        assert result == "Choice 15"
-        mock_select.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_prompt_select_exactly_16_uses_fuzzy() -> None:
-    """Test prompt_select with exactly 16 items uses fuzzy (boundary test)."""
-    from hitl_mcp_cli.ui.prompts import prompt_select
-
-    with patch("hitl_mcp_cli.ui.prompts.inquirer.fuzzy") as mock_fuzzy:
-        mock_result = MagicMock()
-        mock_result.execute.return_value = "Choice 16"
-        mock_fuzzy.return_value = mock_result
-
-        choices = [f"Choice {i}" for i in range(16)]
-        result = await prompt_select("Select one:", choices)
-
-        assert result == "Choice 16"
-        mock_fuzzy.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_prompt_select_with_default_short_list() -> None:
-    """Test prompt_select passes default to select for short lists."""
-    from hitl_mcp_cli.ui.prompts import prompt_select
-
-    with patch("hitl_mcp_cli.ui.prompts.inquirer.select") as mock_select:
-        mock_result = MagicMock()
-        mock_result.execute.return_value = "Choice 2"
-        mock_select.return_value = mock_result
-
-        choices = ["Choice 1", "Choice 2", "Choice 3"]
-        result = await prompt_select("Select one:", choices, default="Choice 2")
-
-        assert result == "Choice 2"
-        call_kwargs = mock_select.call_args[1]
-        assert call_kwargs["default"] == "Choice 2"
-
-
-@pytest.mark.asyncio
-async def test_prompt_select_with_default_long_list() -> None:
-    """Test prompt_select passes default to fuzzy for long lists."""
-    from hitl_mcp_cli.ui.prompts import prompt_select
-
-    with patch("hitl_mcp_cli.ui.prompts.inquirer.fuzzy") as mock_fuzzy:
-        mock_result = MagicMock()
-        mock_result.execute.return_value = "Choice 10"
-        mock_fuzzy.return_value = mock_result
-
-        choices = [f"Choice {i}" for i in range(20)]
-        result = await prompt_select("Select one:", choices, default="Choice 10")
-
-        assert result == "Choice 10"
-        call_kwargs = mock_fuzzy.call_args[1]
-        assert call_kwargs["default"] == "Choice 10"
-
-
-@pytest.mark.asyncio
-async def test_prompt_select_keyboard_interrupt() -> None:
-    """Test prompt_select handles KeyboardInterrupt correctly."""
-    from hitl_mcp_cli.ui.prompts import prompt_select
-
-    with patch("hitl_mcp_cli.ui.prompts.inquirer.select") as mock_select:
-        mock_result = MagicMock()
-        mock_result.execute.side_effect = KeyboardInterrupt()
-        mock_select.return_value = mock_result
-
-        with pytest.raises(KeyboardInterrupt):
-            await prompt_select("Select one:", ["A", "B", "C"])
-
-
-@pytest.mark.asyncio
-async def test_hitl_choose_keyboard_interrupt(mcp_client: Client) -> None:
-    """Test hitl_choose returns cancel action on KeyboardInterrupt."""
-    with patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock:
-        mock.side_effect = KeyboardInterrupt()
-
-        result = await mcp_client.call_tool(
-            "hitl_choose",
-            {"message": "Choose:", "choices": ["A", "B"], "multiple": False},
-        )
-
-        assert result is not None
-        assert result.data == {"action": "cancel"}
-
-
-@pytest.mark.asyncio
-async def test_hitl_choose_generic_exception(mcp_client: Client) -> None:
-    """Test hitl_choose wraps generic exceptions with context."""
+async def test_hitl_choose_no_choices_raises(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Test hitl_choose raises when no choices provided."""
     from fastmcp.exceptions import ToolError
 
-    with patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock:
-        mock.side_effect = ValueError("Invalid choice")
-
-        with pytest.raises(ToolError) as exc_info:
-            await mcp_client.call_tool(
-                "hitl_choose",
-                {"message": "Choose:", "choices": ["A", "B"], "multiple": False},
-            )
-
-        assert "Selection failed" in str(exc_info.value)
-        assert "Invalid choice" in str(exc_info.value)
+    with pytest.raises(ToolError):
+        await mcp_client.call_tool(
+            "hitl_choose",
+            {"message": "Choose:", "multiple": False},
+        )

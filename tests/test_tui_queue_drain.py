@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -16,7 +16,7 @@ from hitl_mcp_cli.tui.screens import ChooseScreen, ConfirmScreen
 class _QueueTestApp(HITLApp):
     """HITLApp subclass that avoids CSS file resolution and auto-start in tests."""
 
-    CSS_PATH = []  # type: ignore[assignment]
+    CSS_PATH: ClassVar[list[str]] = []  # type: ignore[assignment]
 
     def on_mount(self) -> None:
         """Skip auto-starting queue worker and server on mount."""

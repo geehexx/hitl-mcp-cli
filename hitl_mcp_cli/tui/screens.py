@@ -11,7 +11,7 @@ between prompt interactions without losing the pending request.
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, ClassVar
 
 from textual import on
 from textual.app import ComposeResult
@@ -19,7 +19,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.validation import Regex
-from textual.widgets import Button, Input, Label, Markdown, OptionList, Static, TextArea
+from textual.widgets import Button, Collapsible, Input, Label, Markdown, OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 
 from .queue import HITLRequest
@@ -49,6 +49,34 @@ _NOTES_CSS = """
     }
 """
 
+# CSS for collapsible long messages.
+_COLLAPSIBLE_CSS = """
+    .msg-collapsible {
+        width: 1fr;
+        margin-bottom: 1;
+    }
+    .msg-inline {
+        width: 1fr;
+        margin-bottom: 1;
+    }
+    .context-panel {
+        width: 1fr;
+        background: $panel-darken-1;
+        padding: 1;
+        margin-bottom: 1;
+        border-left: thick $accent;
+    }
+    .step-indicator {
+        color: $text-muted;
+        text-style: dim;
+        width: 1fr;
+        margin-bottom: 1;
+    }
+"""
+
+_MSG_COLLAPSE_THRESHOLD = 200
+_MSG_PREVIEW_LEN = 100
+
 
 def _expand_escapes(text: str) -> str:
     """Expand literal backslash-n sequences to real newlines."""
@@ -72,15 +100,41 @@ def _notes_widget(notes: str | None) -> Static | None:
     """Return a Static widget for notes, or None if empty."""
     if notes:
         return Static(
-            f"[bold cyan]ℹ[/bold cyan] [dim italic]{_expand_escapes(notes)}[/dim italic]", classes="notes"
+            f"[bold cyan][i][/bold cyan] [dim italic]{_expand_escapes(notes)}[/dim italic]", classes="notes"
         )
+    return None
+
+
+def _message_widgets(message: str) -> list[Any]:
+    """Return widget(s) for a message, using Collapsible if > threshold."""
+    expanded = _expand_escapes(message)
+    if len(message) <= _MSG_COLLAPSE_THRESHOLD:
+        return [Static(expanded, classes="msg-inline")]
+    preview = expanded[:_MSG_PREVIEW_LEN].rstrip() + "…"
+    inner: Any = Markdown(expanded) if _has_markdown(expanded) else Static(expanded)
+    return [Collapsible(inner, title=preview, collapsed=True, classes="msg-collapsible")]
+
+
+def _context_widget(context_text: str | None) -> Static | None:
+    """Return a context panel widget, or None if empty."""
+    if context_text:
+        return Static(_expand_escapes(context_text), classes="context-panel")
+    return None
+
+
+def _step_widget(step: int | None, total_steps: int | None) -> Static | None:
+    """Return a step indicator widget, or None if not provided."""
+    if step is not None and total_steps is not None:
+        return Static(f"Step {step}/{total_steps}", classes="step-indicator")
     return None
 
 
 class ConfirmScreen(Screen[dict[str, Any]]):
     """Yes/No confirmation with severity styling."""
 
-    BINDINGS = [Binding("escape", "minimize", "Minimize", show=False)]
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
+        Binding("escape", "minimize", "Minimize", show=False)
+    ]
 
     DEFAULT_CSS = (
         """
@@ -119,6 +173,7 @@ class ConfirmScreen(Screen[dict[str, Any]]):
     }
     """
         + _NOTES_CSS
+        + _COLLAPSIBLE_CSS
     )
 
     def __init__(self, request: HITLRequest) -> None:
@@ -128,14 +183,19 @@ class ConfirmScreen(Screen[dict[str, Any]]):
         self._severity: str = request.params.get("severity", "medium")
         self._ctx_text: str | None = request.params.get("context")
         self._notes: str | None = request.params.get("notes")
+        self._step: int | None = request.params.get("step")
+        self._total_steps: int | None = request.params.get("total_steps")
 
     def compose(self) -> ComposeResult:
         """Compose the confirmation dialog UI."""
         severity_class = f"severity-{self._severity}"
         with Vertical(id="confirm-dialog", classes=severity_class):
+            step_w = _step_widget(self._step, self._total_steps)
+            if step_w:
+                yield step_w
             if self._ctx_text:
                 yield Static(_expand_escapes(self._ctx_text), classes="context")
-            yield Static(self._message)
+            yield from _message_widgets(self._message)
             notes_w = _notes_widget(self._notes)
             if notes_w:
                 yield notes_w
@@ -172,12 +232,12 @@ class ConfirmScreen(Screen[dict[str, Any]]):
 class CollectScreen(Screen[str | dict[str, str]]):
     """Text/path/multiline input collection."""
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         Binding("escape", "minimize", "Minimize", show=False),
         Binding("ctrl+j", "submit", "Submit (Ctrl+Enter)", show=True),
     ]
 
-    _PLACEHOLDERS: dict[str, str] = {
+    _PLACEHOLDERS: ClassVar[dict[str, str]] = {
         "text": "Type your response...",
         "path": "Enter file path...",
     }
@@ -240,6 +300,7 @@ class CollectScreen(Screen[str | dict[str, str]]):
     }
     """
         + _NOTES_CSS
+        + _COLLAPSIBLE_CSS
     )
 
     def __init__(self, request: HITLRequest) -> None:
@@ -251,17 +312,26 @@ class CollectScreen(Screen[str | dict[str, str]]):
         self._validation_pattern: str | None = request.params.get("validation_pattern")
         self._validation_message: str | None = request.params.get("validation_message")
         self._notes: str | None = request.params.get("notes")
+        self._ctx_text: str | None = request.params.get("context")
+        self._step: int | None = request.params.get("step")
+        self._total_steps: int | None = request.params.get("total_steps")
         self._is_multiline: bool = self._input_type == "multiline"
 
     def compose(self) -> ComposeResult:
         """Compose the collection dialog UI."""
         with Vertical(id="collect-dialog"):
+            step_w = _step_widget(self._step, self._total_steps)
+            if step_w:
+                yield step_w
+            ctx_w = _context_widget(self._ctx_text)
+            if ctx_w:
+                yield ctx_w
             if self._is_multiline:
-                yield Static(self._message)
+                yield from _message_widgets(self._message)
             else:
                 with Horizontal(classes="prompt-row"):
-                    yield Static("[bold cyan]❯[/bold cyan] ", classes="prompt-icon")
-                    yield Static(self._message)
+                    yield Static("[bold cyan]>[/bold cyan] ", classes="prompt-icon")
+                    yield from _message_widgets(self._message)
             notes_w = _notes_widget(self._notes)
             if notes_w:
                 yield notes_w
@@ -343,7 +413,9 @@ class CollectScreen(Screen[str | dict[str, str]]):
 class ChooseScreen(Screen[str | list[str] | dict[str, str]]):
     """Selection from a list of choices, shown inline with keyboard navigation."""
 
-    BINDINGS = [Binding("escape", "minimize", "Minimize", show=False)]
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
+        Binding("escape", "minimize", "Minimize", show=False)
+    ]
 
     DEFAULT_CSS = (
         """
@@ -376,6 +448,7 @@ class ChooseScreen(Screen[str | list[str] | dict[str, str]]):
     }
     """
         + _NOTES_CSS
+        + _COLLAPSIBLE_CSS
     )
 
     def __init__(self, request: HITLRequest) -> None:
@@ -387,6 +460,9 @@ class ChooseScreen(Screen[str | list[str] | dict[str, str]]):
         self._multiple: bool = request.params.get("multiple", False)
         self._selected: set[str] = set()
         self._notes: str | None = request.params.get("notes")
+        self._ctx_text: str | None = request.params.get("context")
+        self._step: int | None = request.params.get("step")
+        self._total_steps: int | None = request.params.get("total_steps")
         # Index-based ID → original value maps (prevents BadIdentifier on special chars)
         self._choice_index_map: dict[str, str] = {
             f"choice-{i}": choice for i, choice in enumerate(self._choices)
@@ -417,7 +493,13 @@ class ChooseScreen(Screen[str | list[str] | dict[str, str]]):
     def compose(self) -> ComposeResult:
         """Compose the choice selection dialog UI."""
         with Vertical(id="choose-dialog"):
-            yield Static(self._message)
+            step_w = _step_widget(self._step, self._total_steps)
+            if step_w:
+                yield step_w
+            ctx_w = _context_widget(self._ctx_text)
+            if ctx_w:
+                yield ctx_w
+            yield from _message_widgets(self._message)
             notes_w = _notes_widget(self._notes)
             if notes_w:
                 yield notes_w

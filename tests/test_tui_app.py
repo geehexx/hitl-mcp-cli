@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 from textual.widgets import Button, Input, Label, OptionList, RichLog, TextArea
@@ -35,7 +35,7 @@ def _make_request(
 class _TestApp(HITLApp):
     """HITLApp subclass that skips queue worker for testing."""
 
-    CSS_PATH = []  # type: ignore[assignment]  # Override to avoid CSS file resolution in tests
+    CSS_PATH: ClassVar[list[str]] = []  # type: ignore[assignment]  # Override to avoid CSS file resolution in tests
 
     def start_queue_worker(self) -> None:
         pass  # Don't start the blocking queue worker in tests

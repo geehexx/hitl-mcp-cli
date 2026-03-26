@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-03-26
+
+### Added
+- **Session tracking**: All tools now accept `agent_name` and `project_id` params for TUI session display
+- **Step indicators**: All tools accept `step` and `total_steps` params; shown as "Step X/Y" in TUI screens
+- **Queue history**: Queue panel now shows full history with color-coded status (PENDING/DONE/CANCELLED/MINIMIZED)
+- **Clickable queue**: Click any queue row to restore pending/minimized requests or view answered request summaries
+- **Session coloring**: Sessions panel color-codes by recency (active <10min = bright, idle = normal, inactive = dim)
+- **Collapsible messages**: Messages >200 chars use Textual Collapsible widget (collapsed by default, click to expand)
+- **Expand/Collapse All**: ctrl+e toggles all collapsible messages in the current screen
+- **Context param**: `hitl_collect` and `hitl_choose` now accept `context` param (was only on `hitl_confirm`)
+- **Input validation**: `hitl_collect` now accepts `strip_whitespace`, `required`, and `path_type` params
+- **Path normalization**: `hitl_collect` with `input_type='path'` now normalizes `~` and `..` via `Path.expanduser().resolve()`
+- **poe tasks**: Replaced Makefile with poethepoet tasks (`uv run poe test`, `uv run poe check`, etc.)
+- **Snapshot tests**: Added pytest-textual-snapshot for SVG-based TUI visual regression testing
+- **Pilot tests**: Added 23 Textual Pilot tests covering all screen types and interactions
+
+### Changed
+- **TUI is now the only mode**: Removed `--no-tui` flag and InquirerPy headless mode
+- **Session IDs**: Now uses MCP session ID (not thread ID) for session tracking
+- **Textual**: Moved from optional `[tui]` extra to required dependency
+- **Formatting**: Replaced black + isort with `ruff format`
+
+### Removed
+- `--no-tui` CLI flag and headless InquirerPy mode
+- `hitl_mcp_cli/ui/` module (InquirerPy prompts, feedback, banner)
+- `hitl_mcp_cli/tui/tmux_manager.py` (unused)
+- `Makefile` (replaced by poe tasks)
+- `docs/FUTURE.md` (replaced by `docs/ROADMAP.md`)
+- `inquirerpy` dependency
+
 ## [0.8.0] - 2026-03-22
 
 ### Changed

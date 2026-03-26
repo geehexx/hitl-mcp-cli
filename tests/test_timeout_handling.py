@@ -1,213 +1,116 @@
 """Tests for timeout handling and retry scenarios."""
 
+from __future__ import annotations
+
 import asyncio
-from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastmcp import Client
 
-from hitl_mcp_cli.server import mcp
+from hitl_mcp_cli.server import configure_tui_mode, mcp
+from hitl_mcp_cli.tui.queue import HITLQueue
 
 
 @pytest.fixture
-async def mcp_client() -> Client:
-    """Create MCP client for testing."""
+async def tui_queue() -> HITLQueue:
+    queue = HITLQueue()
+    configure_tui_mode(queue, None)  # type: ignore[arg-type]
+    yield queue
+    configure_tui_mode(None, None)  # type: ignore[arg-type]
+
+
+@pytest.fixture
+async def mcp_client(tui_queue: HITLQueue) -> Client:
     async with Client(mcp) as client:
         yield client
 
 
 @pytest.mark.asyncio
-async def test_hitl_collect_timeout_error(mcp_client: Client) -> None:
-    """Test text input handles timeout errors gracefully."""
-    with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock:
-        mock.side_effect = TimeoutError("Request timed out")
-
-        with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("hitl_collect", {"message": "Test:"})
-
-        assert "Input collection failed" in str(exc_info.value)
+async def test_hitl_confirm_timeout_returns_decline(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """hitl_confirm with timeout_seconds=1 and no resolution → timed_out: true."""
+    result = await mcp_client.call_tool("hitl_confirm", {"message": "Deploy?", "timeout_seconds": 1})
+    assert result.data == {"action": "decline", "timed_out": True}
 
 
 @pytest.mark.asyncio
-async def test_hitl_choose_timeout_error(mcp_client: Client) -> None:
-    """Test selection handles timeout errors gracefully."""
-    with patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock:
-        mock.side_effect = TimeoutError("Request timed out")
+async def test_hitl_confirm_no_timeout_when_fast(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Fast response within timeout window → timed_out: false."""
 
-        with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("hitl_choose", {"message": "Choose:", "choices": ["A", "B"]})
+    async def _resolve() -> None:
+        req = await tui_queue.get()
+        tui_queue.resolve(req, {"action": "accept"})
 
-        assert "Selection failed" in str(exc_info.value)
-
-
-@pytest.mark.asyncio
-async def test_hitl_confirm_timeout_error(mcp_client: Client) -> None:
-    """Test confirmation handles timeout errors gracefully."""
-    with patch("hitl_mcp_cli.server.prompt_confirm", new_callable=AsyncMock) as mock:
-        mock.side_effect = TimeoutError("Request timed out")
-
-        with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("hitl_confirm", {"message": "Proceed?"})
-
-        assert "Confirmation failed" in str(exc_info.value)
+    task = asyncio.create_task(_resolve())
+    result = await mcp_client.call_tool("hitl_confirm", {"message": "Continue?", "timeout_seconds": 10})
+    await task
+    assert result.data == {"action": "accept", "timed_out": False}
 
 
 @pytest.mark.asyncio
-async def test_hitl_collect_path_timeout_error(mcp_client: Client) -> None:
-    """Test path input handles timeout errors gracefully."""
-    with patch("hitl_mcp_cli.server.prompt_path", new_callable=AsyncMock) as mock:
-        mock.side_effect = TimeoutError("Request timed out")
+async def test_hitl_collect_resolves(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """hitl_collect resolves when queue resolves."""
 
-        with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("hitl_collect", {"message": "Select path:", "input_type": "path"})
+    async def _resolve() -> None:
+        req = await tui_queue.get()
+        tui_queue.resolve(req, "response")
 
-        assert "Input collection failed" in str(exc_info.value)
-
-
-@pytest.mark.asyncio
-async def test_hitl_collect_connection_error(mcp_client: Client) -> None:
-    """Test text input handles connection errors gracefully."""
-    with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock:
-        mock.side_effect = ConnectionError("Connection lost")
-
-        with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("hitl_collect", {"message": "Test:"})
-
-        assert "Input collection failed" in str(exc_info.value)
+    task = asyncio.create_task(_resolve())
+    result = await mcp_client.call_tool("hitl_collect", {"message": "Name:"})
+    await task
+    assert result.data == "response"
 
 
 @pytest.mark.asyncio
-async def test_hitl_choose_connection_error(mcp_client: Client) -> None:
-    """Test selection handles connection errors gracefully."""
-    with patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock:
-        mock.side_effect = ConnectionError("Connection lost")
-
-        with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("hitl_choose", {"message": "Choose:", "choices": ["A", "B"]})
-
-        assert "Selection failed" in str(exc_info.value)
-
-
-@pytest.mark.asyncio
-async def test_long_running_operation_success(mcp_client: Client) -> None:
-    """Test that long-running operations complete successfully."""
-    with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock:
-
-        async def slow_response(*args: object, **kwargs: object) -> str:
-            await asyncio.sleep(0.1)
-            return "Slow response"
-
-        mock.side_effect = slow_response
-
-        result = await mcp_client.call_tool("hitl_collect", {"message": "Test:"})
-
-        assert result is not None
-        assert result.data == "Slow response"
-
-
-@pytest.mark.asyncio
-async def test_multiple_sequential_calls(mcp_client: Client) -> None:
+async def test_multiple_sequential_calls(mcp_client: Client, tui_queue: HITLQueue) -> None:
     """Test multiple sequential tool calls work correctly."""
-    with (
-        patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock_text,
-        patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock_select,
-        patch("hitl_mcp_cli.server.prompt_confirm", new_callable=AsyncMock) as mock_confirm,
-    ):
-        mock_text.return_value = "Test Input"
-        mock_select.return_value = "Option A"
-        mock_confirm.return_value = True
+    for expected in ["Response 1", "Response 2", "Response 3"]:
 
-        result1 = await mcp_client.call_tool("hitl_collect", {"message": "Name:"})
-        result2 = await mcp_client.call_tool("hitl_choose", {"message": "Choose:", "choices": ["A", "B"]})
-        result3 = await mcp_client.call_tool("hitl_confirm", {"message": "Proceed?"})
+        async def _resolve(val: str = expected) -> None:
+            req = await tui_queue.get()
+            tui_queue.resolve(req, val)
 
-        assert result1.data == "Test Input"
-        assert result2.data == "Option A"
-        assert result3.data == {"action": "accept", "timed_out": False}
+        task = asyncio.create_task(_resolve())
+        result = await mcp_client.call_tool("hitl_collect", {"message": "Prompt:"})
+        await task
+        assert result.data == expected
 
 
 @pytest.mark.asyncio
-async def test_concurrent_tool_calls(mcp_client: Client) -> None:
-    """Test that concurrent tool calls are handled properly."""
-    with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock:
-        mock.return_value = "Concurrent response"
+async def test_server_healthy_after_timeout(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Server still accepts calls after a timeout."""
+    r1 = await mcp_client.call_tool("hitl_confirm", {"message": "Slow?", "timeout_seconds": 1})
+    assert r1.data["timed_out"] is True
 
-        tasks = [mcp_client.call_tool("hitl_collect", {"message": f"Test {i}:"}) for i in range(3)]
+    # Drain stale queue entry from timed-out call
+    if tui_queue.size > 0:
+        stale = await tui_queue.get()
+        tui_queue.resolve(stale, {"action": "cancel"})
 
-        results = await asyncio.gather(*tasks)
+    async def _resolve() -> None:
+        req = await tui_queue.get()
+        tui_queue.resolve(req, "healthy")
 
-        assert len(results) == 3
-        assert all(r.data == "Concurrent response" for r in results)
-
-
-@pytest.mark.asyncio
-async def test_error_recovery_after_failure(mcp_client: Client) -> None:
-    """Test that server recovers after a tool call failure."""
-    with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock:
-        mock.side_effect = [ValueError("First call failed"), "Second call success"]
-
-        with pytest.raises(Exception):
-            await mcp_client.call_tool("hitl_collect", {"message": "Test 1:"})
-
-        result = await mcp_client.call_tool("hitl_collect", {"message": "Test 2:"})
-        assert result.data == "Second call success"
+    task = asyncio.create_task(_resolve())
+    r2 = await mcp_client.call_tool("hitl_collect", {"message": "Name:"})
+    await task
+    assert r2.data == "healthy"
 
 
 @pytest.mark.asyncio
-async def test_hitl_confirm_timeout(mcp_client: Client) -> None:
-    """Test hitl_confirm returns timed_out when prompt exceeds timeout."""
-    with patch("hitl_mcp_cli.server.prompt_confirm", new_callable=AsyncMock) as mock:
+async def test_error_recovery_after_reject(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Server recovers after a queue rejection."""
 
-        async def slow_prompt(*args: object, **kwargs: object) -> bool:
-            await asyncio.sleep(2)
-            return True
+    async def _reject_then_resolve() -> None:
+        req1 = await tui_queue.get()
+        tui_queue.reject(req1, RuntimeError("First call failed"))
+        req2 = await tui_queue.get()
+        tui_queue.resolve(req2, "Second call success")
 
-        mock.side_effect = slow_prompt
+    task = asyncio.create_task(_reject_then_resolve())
 
-        result = await mcp_client.call_tool(
-            "hitl_confirm",
-            {"message": "Deploy?", "timeout_seconds": 1},
-        )
+    with pytest.raises(Exception):
+        await mcp_client.call_tool("hitl_collect", {"message": "Test 1:"})
 
-        assert result is not None
-        assert result.data == {"action": "decline", "timed_out": True}
-
-
-@pytest.mark.asyncio
-async def test_hitl_confirm_timeout_keyboard_interrupt(mcp_client: Client) -> None:
-    """Test hitl_confirm with timeout returns cancel on KeyboardInterrupt."""
-    with patch("hitl_mcp_cli.server.prompt_confirm", new_callable=AsyncMock) as mock:
-        mock.side_effect = KeyboardInterrupt()
-
-        result = await mcp_client.call_tool(
-            "hitl_confirm",
-            {"message": "Deploy?", "timeout_seconds": 30},
-        )
-
-        assert result is not None
-        assert result.data["action"] == "cancel"
-        assert result.data["timed_out"] is False
-
-
-@pytest.mark.asyncio
-async def test_hitl_collect_keyboard_interrupt_cancel(mcp_client: Client) -> None:
-    """Test hitl_collect returns cancel dict on KeyboardInterrupt."""
-    with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock:
-        mock.side_effect = KeyboardInterrupt()
-
-        result = await mcp_client.call_tool("hitl_collect", {"message": "Name:"})
-
-        assert result is not None
-        assert result.data == {"action": "cancel"}
-
-
-@pytest.mark.asyncio
-async def test_hitl_choose_keyboard_interrupt_cancel(mcp_client: Client) -> None:
-    """Test hitl_choose returns cancel dict on KeyboardInterrupt."""
-    with patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock:
-        mock.side_effect = KeyboardInterrupt()
-
-        result = await mcp_client.call_tool("hitl_choose", {"message": "Pick:", "choices": ["A", "B"]})
-
-        assert result is not None
-        assert result.data == {"action": "cancel"}
+    result = await mcp_client.call_tool("hitl_collect", {"message": "Test 2:"})
+    await task
+    assert result.data == "Second call success"

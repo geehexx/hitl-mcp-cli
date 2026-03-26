@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import pytest
 from textual.widgets import DataTable
 
@@ -12,7 +14,7 @@ from hitl_mcp_cli.tui.queue import HITLQueue
 class _TestApp(HITLApp):
     """Test subclass that skips server thread and auto-starts queue worker."""
 
-    CSS_PATH: list = []
+    CSS_PATH: ClassVar[list[str]] = []
 
     def on_mount(self) -> None:
         # Init tables only, no server thread
@@ -74,7 +76,8 @@ async def test_queue_table_add_remove() -> None:
 
         app.remove_queue_row("req-1")
         await pilot.pause(0.1)
-        assert table.row_count == 0
+        # Row stays in table (queue history persistence) — only status is updated
+        assert table.row_count == 1
         assert app.queue_count == 0
 
 

@@ -210,3 +210,6 @@ __marimo__/
 .amazonq/
 .windsurf/
 .cursor/
+
+# pytest-textual-snapshot generated report
+snapshot_report.html

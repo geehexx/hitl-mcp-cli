@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -74,10 +74,10 @@ class TestHitlCollectTuiMode:
         assert result == "Alice"
 
     @pytest.mark.asyncio
-    async def test_collect_falls_through_without_tui(self) -> None:
-        with patch("hitl_mcp_cli.server._collect_input", new_callable=AsyncMock, return_value="Bob"):
-            result = await _hitl_collect(message="Name?")
-        assert result == "Bob"
+    async def test_collect_raises_without_tui(self) -> None:
+        """Without TUI queue configured, collect raises RuntimeError."""
+        with pytest.raises(RuntimeError, match="TUI mode"):
+            await _hitl_collect(message="Name?")
 
 
 class TestHitlConfirmTuiMode:
@@ -136,7 +136,7 @@ class TestHitlNotifyTuiMode:
         app.call_from_thread.assert_any_call(app.stream_output, "Build", "Done!", "info")
 
     @pytest.mark.asyncio
-    async def test_notify_falls_through_without_tui(self) -> None:
-        with patch("hitl_mcp_cli.server.display_notification"):
-            result = await _hitl_notify(message="Hello")
-        assert result == {"acknowledged": True}
+    async def test_notify_raises_without_tui(self) -> None:
+        """Without TUI queue configured, notify raises RuntimeError."""
+        with pytest.raises(RuntimeError, match="TUI mode"):
+            await _hitl_notify(message="Hello")

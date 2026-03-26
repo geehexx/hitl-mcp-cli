@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 from textual.widgets import OptionList
@@ -23,7 +23,7 @@ def _make_request(params: dict[str, Any]) -> HITLRequest:
 
 
 class _TestApp(HITLApp):
-    CSS_PATH = []  # type: ignore[assignment]
+    CSS_PATH: ClassVar[list[str]] = []  # type: ignore[assignment]
 
     def start_queue_worker(self) -> None:
         pass

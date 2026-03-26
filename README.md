@@ -60,14 +60,13 @@ HITL MCP CLI provides a **standardized, elegant interface** for AI agents to req
 ## ✨ Features
 
 - **🎯 5 Interactive Tools**: Collect input, ask questions, choose from options, confirm actions, and send notifications
-- **🎨 Beautiful Terminal UI**: Icons, gradients, and smooth animations
+- **🖥️ Full TUI**: Textual-based terminal UI with sessions panel, queue history, and collapsible messages
 - **🚀 Instant Setup**: Works with `uvx` — no installation required
 - **🔌 MCP Standard**: Seamless integration with any MCP-compatible AI agent
 - **⚡ Lightning Fast**: Async-first design with minimal overhead
 - **🛡️ Type-Safe**: Full type hints for reliability and IDE support
 - **📊 Interaction Logging**: All tool calls logged to `~/.local/state/hitl-mcp/interactions.jsonl`
-- **🌈 Visual Feedback**: Loading indicators and status messages
-- **🔧 Customizable**: Disable animations, customize host/port
+- **🔧 Customizable**: Customize host/port, log level
 
 ---
 
@@ -100,17 +99,10 @@ hitl-mcp
 # Custom host/port
 hitl-mcp --host 0.0.0.0 --port 8080
 
-# Headless mode (CI/scripts, no TUI)
-hitl-mcp --no-tui
-
-# Disable banner (headless mode only)
-hitl-mcp --no-tui --no-banner
-
 # Using environment variables
 export HITL_HOST=0.0.0.0
 export HITL_PORT=8080
 export HITL_LOG_LEVEL=INFO
-export HITL_NO_TUI=true
 hitl-mcp
 ```
 
@@ -119,7 +111,6 @@ hitl-mcp
 - `HITL_PORT`: Server port (default: 5555)
 - `HITL_LOG_LEVEL`: Logging level - DEBUG, INFO, WARNING, ERROR (default: ERROR)
 - `HITL_NO_BANNER`: Disable startup banner - true/false (default: false)
-- `HITL_NO_TUI`: Disable TUI mode - true/false (default: false)
 
 ### Configure Your AI Agent
 
@@ -184,6 +175,14 @@ description = await hitl_collect(
 - `default` (str, optional): Pre-filled value
 - `validation_pattern` (str, optional): Regex pattern for validation
 - `validation_message` (str, optional): Custom validation error message
+- `context` (str, optional): Additional context displayed above the prompt
+- `strip_whitespace` (bool): Strip leading/trailing whitespace from input (default: False)
+- `required` (bool): Reject empty input (default: False)
+- `path_type` (Literal["file", "dir", "any"], optional): Validate path type when `input_type="path"`
+- `agent_name` (str, optional): Calling agent identifier (shown in Sessions panel)
+- `project_id` (str, optional): Project identifier for session grouping
+- `step` (int, optional): Current step number (shown as "Step X/Y")
+- `total_steps` (int, optional): Total steps in workflow
 - `notes` (str, optional): Freeform context displayed as a dimmed line below the message
 
 ---
@@ -236,6 +235,11 @@ features = await hitl_choose(
 - `multiple` (bool): Enable checkbox mode (default: False)
 - `default` (str, optional): Pre-selected option
 - `fuzzy_search` (bool, optional): Force fuzzy search on/off (auto for >15 items)
+- `context` (str, optional): Additional context displayed above the prompt
+- `agent_name` (str, optional): Calling agent identifier (shown in Sessions panel)
+- `project_id` (str, optional): Project identifier for session grouping
+- `step` (int, optional): Current step number (shown as "Step X/Y")
+- `total_steps` (int, optional): Total steps in workflow
 - `notes` (str, optional): Freeform context displayed as a dimmed line below the message
 
 > **Escape hatch**: In multiple-selection mode, if the user selects all or none of the options, they are offered a free-text input to explain their intent.
@@ -284,6 +288,10 @@ if result.get("timed_out"):
 - `severity` (Literal["low", "medium", "high"]): Confirmation intensity (default: "medium")
 - `context` (str, optional): Additional context displayed in a panel above the prompt
 - `timeout_seconds` (int): Seconds to wait, 0 = infinite (default: 0)
+- `agent_name` (str, optional): Calling agent identifier (shown in Sessions panel)
+- `project_id` (str, optional): Project identifier for session grouping
+- `step` (int, optional): Current step number (shown as "Step X/Y")
+- `total_steps` (int, optional): Total steps in workflow
 - `notes` (str, optional): Freeform context displayed as a dimmed line below the message
 
 **Returns**: `{"action": "accept"|"decline"|"cancel"}`. When `timeout_seconds > 0`, also includes `"timed_out": bool`.
@@ -318,6 +326,10 @@ await hitl_notify(
 - `message` (str): Detailed message (supports multi-line)
 - `level` (Literal["success", "info", "warning", "error"]): Visual style (default: "info")
 - `title` (str, optional): Notification title
+- `agent_name` (str, optional): Calling agent identifier (shown in Sessions panel)
+- `project_id` (str, optional): Project identifier for session grouping
+- `step` (int, optional): Current step number (shown as "Step X/Y")
+- `total_steps` (int, optional): Total steps in workflow
 - `notes` (str, optional): Freeform context displayed as a dimmed line below the notification
 
 ---
@@ -428,7 +440,7 @@ AI Agent (Claude, GPT, etc.)
          ↓ HTTP (MCP Protocol)
     FastMCP Server
          ↓ Async Calls
-      UI Layer (InquirerPy + Rich)
+      TUI Layer (Textual)
          ↓ Terminal I/O
         User
 ```
@@ -437,14 +449,39 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture docum
 
 ---
 
+## 🖥️ TUI Features
+
+The Textual-based TUI provides a rich terminal interface:
+
+- **Sessions panel**: Shows agent names and projects, color-coded by recency (active <10min = bright, idle = normal, inactive = dim). Toggle with `ctrl+b` or `f3`.
+- **Queue panel**: Full history of all requests with color-coded status (PENDING/DONE/CANCELLED). Click any row to restore a pending request or view a summary of an answered one.
+- **Collapsible messages**: Messages longer than 200 chars are collapsed by default — click to expand, or use `ctrl+e` to expand/collapse all.
+- **Step indicators**: When `step` and `total_steps` are provided, the screen header shows "Step X/Y".
+
+### Key Bindings
+
+| Key | Action |
+|-----|--------|
+| `q` | Quit |
+| `ctrl+l` | Clear activity log |
+| `ctrl+b` | Toggle sessions panel |
+| `f2` | Cycle log level (DEBUG/INFO/WARNING/ERROR) |
+| `f3` | Toggle sessions panel (VS Code-safe alternative) |
+| `ctrl+e` | Expand/collapse all collapsible messages |
+| `escape` | Cancel/close dialog |
+
+---
+
+---
+
 ## 📋 Logs
 
 HITL MCP logs every tool interaction to `~/.local/state/hitl-mcp/interactions.jsonl` as JSONL. Each entry includes tool name, duration, result type, and a preview of the message and result. The log auto-rotates at 10 MB.
 
-A sample logrotate config is provided at [docs/logrotate.conf](docs/logrotate.conf):
+A sample logrotate config is provided at [contrib/logrotate.conf](contrib/logrotate.conf):
 
 ```bash
-sudo cp docs/logrotate.conf /etc/logrotate.d/hitl-mcp
+sudo cp contrib/logrotate.conf /etc/logrotate.d/hitl-mcp
 ```
 
 ---
@@ -462,18 +499,18 @@ uv sync --all-extras
 ### Testing
 
 ```bash
-# Run all tests
-uv run pytest
+# Run tests
+uv run poe test
 
 # With coverage
 uv run pytest --cov --cov-report=html
 
-# Type checking
-uv run mypy hitl_mcp_cli/
+# Lint and format
+uv run poe lint
+uv run poe format
 
-# Linting
-uv run ruff check .
-uv run black --check .
+# All checks
+uv run poe check
 ```
 
 See [docs/TESTING.md](docs/TESTING.md) for comprehensive testing guide.
@@ -498,7 +535,7 @@ npx @modelcontextprotocol/inspector hitl-mcp
 - **[Architecture](docs/ARCHITECTURE.md)**: System design and component details
 - **[Testing Guide](docs/TESTING.md)**: Comprehensive testing documentation
 - **[Accessibility](docs/ACCESSIBILITY.md)**: Accessibility features and guidelines
-- **[Future Enhancements](docs/FUTURE.md)**: Planned improvements and ideas
+- **[Roadmap](docs/ROADMAP.md)**: Future considerations
 - **[Changelog](CHANGELOG.md)**: Version history and changes
 
 ## ♿ Accessibility
@@ -529,18 +566,6 @@ For the best experience in VS Code's integrated terminal, add to your `settings.
 This ensures `Ctrl+\` (command palette) and other key bindings reach the TUI.
 
 > **Note**: `ctrl+b` and `ctrl+\` may be intercepted by VS Code. Add these to `commandsToSkipShell` in your VS Code settings, or use `f2` (log level) and `f3` (toggle sessions) as alternatives.
-
-### Key bindings
-
-| Key | Action |
-|-----|--------|
-| `q` | Quit |
-| `ctrl+l` | Clear activity log |
-| `ctrl+b` | Toggle sessions panel |
-| `f2` | Cycle log level (DEBUG/INFO/WARNING/ERROR) |
-| `f3` | Toggle sessions panel (VS Code-safe alternative) |
-| `ctrl+\` | Command palette |
-| `escape` | Cancel/close dialog |
 
 ---
 
@@ -597,7 +622,7 @@ Don't forget to update your MCP client configuration to match the new port.
 - A health check system uses GET instead of POST
 - An agent incorrectly probes the endpoint
 
-If you need a health check endpoint, this is tracked in docs/FUTURE.md as a future enhancement.
+If you need a health check endpoint, this is tracked in docs/ROADMAP.md as a future consideration.
 
 ### Verbose Server Logs
 
@@ -698,8 +723,7 @@ Apache License 2.0 - see [LICENSE](LICENSE) for details.
 
 Built with:
 - [FastMCP](https://github.com/jlowin/fastmcp) - Fast, Pythonic MCP server framework
-- [InquirerPy](https://github.com/kazhala/InquirerPy) - Interactive terminal prompts
-- [Rich](https://github.com/Textualize/rich) - Beautiful terminal formatting
+- [Textual](https://github.com/Textualize/textual) - Modern TUI framework for Python
 
 ---
 

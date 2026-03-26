@@ -44,6 +44,9 @@ class HITLRequest:
     priority: int = 5
     request_id: str = field(default_factory=lambda: str(uuid4()))
     created_at: float = field(default_factory=time.monotonic)
+    # Status tracking (v0.9.0)
+    status: str = "pending"  # "pending", "answered", "cancelled", "minimized"
+    answer_preview: str = ""  # truncated answer for display
 
     def __post_init__(self) -> None:
         self.params = _sanitize_params(self.params)
@@ -67,6 +70,9 @@ class HITLQueue:
         self._queue: asyncio.PriorityQueue[tuple[int, int, HITLRequest]] = asyncio.PriorityQueue()
         self._caller_loop: asyncio.AbstractEventLoop | None = None
         self._textual_loop: asyncio.AbstractEventLoop | None = None
+        # History: all requests ever enqueued (never removed)
+        self.history: list[HITLRequest] = []
+        self._by_id: dict[str, HITLRequest] = {}
 
     def set_caller_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         """Register the event loop that creates futures (uvicorn thread)."""
@@ -76,8 +82,37 @@ class HITLQueue:
         """Register the Textual event loop that owns the asyncio.PriorityQueue."""
         self._textual_loop = loop
 
+    def _register(self, request: HITLRequest) -> None:
+        """Add request to history and lookup dict."""
+        self.history.append(request)
+        self._by_id[request.request_id] = request
+
+    def get_by_id(self, request_id: str) -> HITLRequest | None:
+        """Look up a request by its ID."""
+        return self._by_id.get(request_id)
+
+    def mark_answered(self, request_id: str, answer_preview: str = "") -> None:
+        """Mark a request as answered."""
+        req = self._by_id.get(request_id)
+        if req is not None:
+            req.status = "answered"
+            req.answer_preview = answer_preview[:60]
+
+    def mark_cancelled(self, request_id: str) -> None:
+        """Mark a request as cancelled."""
+        req = self._by_id.get(request_id)
+        if req is not None:
+            req.status = "cancelled"
+
+    def mark_minimized(self, request_id: str) -> None:
+        """Mark a request as minimized."""
+        req = self._by_id.get(request_id)
+        if req is not None:
+            req.status = "minimized"
+
     async def put(self, request: HITLRequest) -> None:
         """Enqueue a request. The sequence number breaks priority ties (FIFO)."""
+        self._register(request)
         seq = next(HITLQueue._seq)
         await self._queue.put((request.priority, seq, request))
 
@@ -87,6 +122,7 @@ class HITLQueue:
         Schedules put_nowait on the Textual event loop via
         call_soon_threadsafe.  Safe for unbounded PriorityQueue.
         """
+        self._register(request)
         seq = next(HITLQueue._seq)
         item = (request.priority, seq, request)
         loop = self._textual_loop

@@ -88,7 +88,7 @@ uv run pytest && uv run mypy hitl_mcp_cli/ && uv run ruff check . && uv run blac
 - Update README.md if adding user-facing features
 - Update CHANGELOG.md following Keep a Changelog format
 - Update docs/ if changing architecture or testing
-- Add to docs/FUTURE.md if deferring enhancements
+- Add to docs/ROADMAP.md if deferring enhancements
 
 ### 6. Commit Changes
 

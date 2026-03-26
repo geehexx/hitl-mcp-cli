@@ -1,22 +1,17 @@
-"""Shared test fixtures — isolate interaction log from real filesystem."""
+"""Shared test fixtures for hitl-mcp-cli tests."""
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import patch
-
 import pytest
 
-import hitl_mcp_cli.interaction_log as interaction_log
+from hitl_mcp_cli.server import configure_tui_mode
+from hitl_mcp_cli.tui.queue import HITLQueue
 
 
-@pytest.fixture(autouse=True, scope="session")
-def isolate_interaction_log(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Redirect all interaction logging to a temp directory for the entire test session."""
-    tmp = tmp_path_factory.mktemp("hitl_log")
-    log_file = tmp / "interactions.jsonl"
-    with (
-        patch.object(interaction_log, "LOG_DIR", tmp),
-        patch.object(interaction_log, "LOG_FILE", log_file),
-    ):
-        yield tmp
+@pytest.fixture
+async def tui_queue() -> HITLQueue:
+    """Create a TUI queue and configure the server to use it."""
+    queue = HITLQueue()
+    configure_tui_mode(queue, None)  # type: ignore[arg-type]
+    yield queue
+    configure_tui_mode(None, None)  # type: ignore[arg-type]

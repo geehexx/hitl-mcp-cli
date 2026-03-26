@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
-from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastmcp import Client
@@ -20,56 +18,64 @@ from hitl_mcp_cli.tui.queue import HITLQueue, HITLRequest
 
 
 @pytest.fixture
-async def mcp_client() -> Client:
+async def tui_queue() -> HITLQueue:
+    """Create a TUI queue and configure the server to use it."""
+    from hitl_mcp_cli.server import configure_tui_mode
+
+    queue = HITLQueue()
+    configure_tui_mode(queue, None)  # type: ignore[arg-type]
+    yield queue
+    configure_tui_mode(None, None)  # type: ignore[arg-type]
+
+
+@pytest.fixture
+async def mcp_client(tui_queue: HITLQueue) -> Client:
     async with Client(mcp) as client:
         yield client
 
 
 # ---------------------------------------------------------------------------
-# Timeout via MCP Client (non-TUI mode — exercises server.py timeout paths)
+# Timeout via MCP Client (TUI mode — exercises server.py timeout paths)
 # ---------------------------------------------------------------------------
 
 
 class TestConfirmTimeout:
     @pytest.mark.asyncio
-    async def test_confirm_timeout_returns_decline(self, mcp_client: Client) -> None:
-        """hitl_confirm with timeout_seconds=1 and slow prompt → timed_out: true."""
-        with patch("hitl_mcp_cli.server.prompt_confirm", new_callable=AsyncMock) as mock:
-
-            async def _slow(*a: Any, **kw: Any) -> bool:
-                await asyncio.sleep(3)
-                return True
-
-            mock.side_effect = _slow
-            result = await mcp_client.call_tool("hitl_confirm", {"message": "Deploy?", "timeout_seconds": 1})
-            assert result.data["timed_out"] is True
-            assert result.data["action"] == "decline"
+    async def test_confirm_timeout_returns_decline(self, mcp_client: Client, tui_queue: HITLQueue) -> None:
+        """hitl_confirm with timeout_seconds=1 and no resolution → timed_out: true."""
+        # Don't resolve — let it time out
+        result = await mcp_client.call_tool("hitl_confirm", {"message": "Deploy?", "timeout_seconds": 1})
+        assert result.data["timed_out"] is True
+        assert result.data["action"] == "decline"
 
     @pytest.mark.asyncio
-    async def test_confirm_no_timeout_when_fast(self, mcp_client: Client) -> None:
+    async def test_confirm_no_timeout_when_fast(self, mcp_client: Client, tui_queue: HITLQueue) -> None:
         """Fast response within timeout window → timed_out: false."""
-        with patch("hitl_mcp_cli.server.prompt_confirm", new_callable=AsyncMock) as mock:
-            mock.return_value = True
-            result = await mcp_client.call_tool(
-                "hitl_confirm", {"message": "Continue?", "timeout_seconds": 10}
-            )
-            assert result.data["timed_out"] is False
-            assert result.data["action"] == "accept"
+
+        async def _resolve() -> None:
+            req = await tui_queue.get()
+            tui_queue.resolve(req, {"action": "accept"})
+
+        task = asyncio.create_task(_resolve())
+        result = await mcp_client.call_tool("hitl_confirm", {"message": "Continue?", "timeout_seconds": 10})
+        await task
+        assert result.data["timed_out"] is False
+        assert result.data["action"] == "accept"
 
 
 class TestCollectTimeout:
     @pytest.mark.asyncio
-    async def test_collect_slow_prompt_completes(self, mcp_client: Client) -> None:
-        """hitl_collect has no built-in timeout — slow prompt still returns."""
-        with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock:
+    async def test_collect_slow_prompt_completes(self, mcp_client: Client, tui_queue: HITLQueue) -> None:
+        """hitl_collect has no built-in timeout — resolves when queue resolves."""
 
-            async def _slow(*a: Any, **kw: Any) -> str:
-                await asyncio.sleep(0.1)
-                return "delayed"
+        async def _resolve() -> None:
+            req = await tui_queue.get()
+            tui_queue.resolve(req, "delayed")
 
-            mock.side_effect = _slow
-            result = await mcp_client.call_tool("hitl_collect", {"message": "Name:"})
-            assert result.data == "delayed"
+        task = asyncio.create_task(_resolve())
+        result = await mcp_client.call_tool("hitl_collect", {"message": "Name:"})
+        await task
+        assert result.data == "delayed"
 
 
 # ---------------------------------------------------------------------------
@@ -121,39 +127,36 @@ class TestCancellationCleanup:
 
 class TestServerHealthAfterTimeout:
     @pytest.mark.asyncio
-    async def test_new_call_after_timeout(self, mcp_client: Client) -> None:
+    async def test_new_call_after_timeout(self, mcp_client: Client, tui_queue: HITLQueue) -> None:
         """After a timeout, server still accepts new tool calls."""
-        with patch("hitl_mcp_cli.server.prompt_confirm", new_callable=AsyncMock) as mock_confirm:
+        r1 = await mcp_client.call_tool("hitl_confirm", {"message": "Slow?", "timeout_seconds": 1})
+        assert r1.data["timed_out"] is True
 
-            async def _slow(*a: Any, **kw: Any) -> bool:
-                await asyncio.sleep(3)
-                return True
+        # Drain stale queue entry from timed-out call
+        if tui_queue.size > 0:
+            stale = await tui_queue.get()
+            tui_queue.resolve(stale, {"action": "cancel"})
 
-            mock_confirm.side_effect = _slow
-            r1 = await mcp_client.call_tool("hitl_confirm", {"message": "Slow?", "timeout_seconds": 1})
-            assert r1.data["timed_out"] is True
+        async def _resolve() -> None:
+            req = await tui_queue.get()
+            tui_queue.resolve(req, "healthy")
 
-        # New call should work fine
-        with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock_text:
-            mock_text.return_value = "healthy"
-            r2 = await mcp_client.call_tool("hitl_collect", {"message": "Name:"})
-            assert r2.data == "healthy"
+        task = asyncio.create_task(_resolve())
+        r2 = await mcp_client.call_tool("hitl_collect", {"message": "Name:"})
+        await task
+        assert r2.data == "healthy"
 
     @pytest.mark.asyncio
-    async def test_notify_after_timeout(self, mcp_client: Client) -> None:
+    async def test_notify_after_timeout(self, mcp_client: Client, tui_queue: HITLQueue) -> None:
         """hitl_notify works after a confirm timeout."""
-        with patch("hitl_mcp_cli.server.prompt_confirm", new_callable=AsyncMock) as mock:
+        await mcp_client.call_tool("hitl_confirm", {"message": "Slow?", "timeout_seconds": 1})
+        # Drain stale queue entry
+        if tui_queue.size > 0:
+            stale = await tui_queue.get()
+            tui_queue.resolve(stale, {"action": "cancel"})
 
-            async def _slow(*a: Any, **kw: Any) -> bool:
-                await asyncio.sleep(3)
-                return True
-
-            mock.side_effect = _slow
-            await mcp_client.call_tool("hitl_confirm", {"message": "Slow?", "timeout_seconds": 1})
-
-        with patch("hitl_mcp_cli.server.display_notification"):
-            r = await mcp_client.call_tool("hitl_notify", {"message": "Still alive"})
-            assert r.data == {"acknowledged": True}
+        r = await mcp_client.call_tool("hitl_notify", {"message": "Still alive"})
+        assert r.data == {"acknowledged": True}
 
 
 # ---------------------------------------------------------------------------
@@ -163,16 +166,9 @@ class TestServerHealthAfterTimeout:
 
 class TestInteractionLogOnTimeout:
     @pytest.mark.asyncio
-    async def test_timeout_logged(self, mcp_client: Client) -> None:
+    async def test_timeout_logged(self, mcp_client: Client, tui_queue: HITLQueue) -> None:
         """Verify result_type: timeout written to interaction log."""
-        with patch("hitl_mcp_cli.server.prompt_confirm", new_callable=AsyncMock) as mock:
-
-            async def _slow(*a: Any, **kw: Any) -> bool:
-                await asyncio.sleep(3)
-                return True
-
-            mock.side_effect = _slow
-            await mcp_client.call_tool("hitl_confirm", {"message": "Log timeout?", "timeout_seconds": 1})
+        await mcp_client.call_tool("hitl_confirm", {"message": "Log timeout?", "timeout_seconds": 1})
 
         # Read the last log entry (conftest redirects LOG_FILE to tmp)
         entries = [json.loads(line) for line in LOG_FILE.read_text().splitlines() if line.strip()]
