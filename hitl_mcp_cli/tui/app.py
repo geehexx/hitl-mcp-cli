@@ -139,7 +139,14 @@ class HITLApp(App[None]):
         st.add_columns("Client", "Project", "Calls", "Pending", "Last active")
 
         qt = self.query_one("#queue-table", DataTable)
-        qt.add_columns("#", "Tool", "Message", "Status", "Answer", "Elapsed")
+        qt.add_columns(
+            ("#", "num"),
+            ("Tool", "tool"),
+            ("Message", "msg"),
+            ("Status", "status"),
+            ("Answer", "answer"),
+            ("Elapsed", "elapsed"),
+        )
 
         log = self.query_one("#output-log", RichLog)
         log.write("[bold cyan]HITL MCP Server[/bold cyan] [dim]v0.9.0[/dim]")
@@ -277,7 +284,7 @@ class HITLApp(App[None]):
             elapsed = int(now - request.created_at)
             elapsed_text = Text(f"{elapsed}s", style="dim", justify="right")
             try:
-                qt.update_cell(request_id, "Elapsed", elapsed_text, update_width=False)
+                qt.update_cell(request_id, "elapsed", elapsed_text, update_width=False)
             except Exception:
                 pass
 
@@ -435,6 +442,9 @@ class HITLApp(App[None]):
                         level = params.get("level", "info")
                         self.stream_output(agent, message, level)
                         self._hitl_queue.resolve(request, True)
+                        sid = request.params.get("_session_id", "")
+                        if sid:
+                            self.record_session_resolved(sid)
                     else:
                         msg = request.params.get("message", "")
                         client_name = request.params.get("_client_name", "unknown")
@@ -502,6 +512,9 @@ class HITLApp(App[None]):
                                 "success",
                             )
                         self._hitl_queue.resolve(request, result)
+                        sid = request.params.get("_session_id", "")
+                        if sid:
+                            self.record_session_resolved(sid)
                 except Exception as e:
                     logger.error(f"Screen error for {request.tool}: {e}", exc_info=True)
                     elapsed = asyncio.get_event_loop().time() - _start
@@ -522,6 +535,9 @@ class HITLApp(App[None]):
                     self._hitl_queue.mark_cancelled(request.request_id)
                     self._update_queue_row_status(request.request_id, "cancelled")
                     self._hitl_queue.reject(request, e)
+                    sid = request.params.get("_session_id", "")
+                    if sid:
+                        self.record_session_resolved(sid)
                 self.update_queue_status()
         except asyncio.CancelledError:
             while not self._hitl_queue._queue.empty():
@@ -537,11 +553,11 @@ class HITLApp(App[None]):
         """Update status and answer cells for a queue row."""
         table = self.query_one("#queue-table", DataTable)
         try:
-            table.update_cell(request_id, "Status", _queue_status_text(status), update_width=False)
+            table.update_cell(request_id, "status", _queue_status_text(status), update_width=False)
             if answer_preview:
                 table.update_cell(
                     request_id,
-                    "Answer",
+                    "answer",
                     Text(answer_preview[:30], style="dim"),
                     update_width=False,
                 )

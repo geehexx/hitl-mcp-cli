@@ -92,9 +92,6 @@ async def _tui_enqueue(
 
     result = await future
 
-    if _tui_app is not None:
-        _tui_app.call_from_thread(_tui_app.record_session_resolved, sid)
-
     return result
 
 
@@ -447,6 +444,7 @@ async def hitl_notify(
             f"▶ [bold]hitl_notify[/bold] \\[{client_name or 'unknown'}] — {short_msg}",
             "info",
         )
+        _tui_app.call_from_thread(_tui_app.record_session_resolved, session_id)
     # Suppress unused variable warning — queue is checked via _require_tui_queue
     _ = queue
     ms = int((time.monotonic() - t0) * 1000)
