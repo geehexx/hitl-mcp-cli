@@ -364,6 +364,7 @@ class ChooseScreen(Screen[str | list[str] | dict[str, str]]):
         overflow-y: auto;
     }
     #choose-list { height: auto; max-height: 16; width: 1fr; }
+    #choose-buttons { height: auto; max-height: 16; width: 1fr; overflow-y: auto; }
     .choice-btn { width: 1fr; }
     #custom-input { margin-top: 1; }
     #choose-dialog Horizontal {
@@ -386,6 +387,19 @@ class ChooseScreen(Screen[str | list[str] | dict[str, str]]):
         self._multiple: bool = request.params.get("multiple", False)
         self._selected: set[str] = set()
         self._notes: str | None = request.params.get("notes")
+        # Index-based ID → original value maps (prevents BadIdentifier on special chars)
+        self._choice_index_map: dict[str, str] = {
+            f"choice-{i}": choice for i, choice in enumerate(self._choices)
+        }
+        self._option_value_map: dict[str, str] = {
+            self._sanitize_option_id(o["value"], i): o["value"] for i, o in enumerate(self._options)
+        }
+
+    @staticmethod
+    def _sanitize_option_id(value: str, index: int) -> str:
+        """Sanitize an option value into a valid Textual widget ID."""
+        sanitized = re.sub(r"[^a-zA-Z0-9_-]", "-", str(value)).lstrip("-")
+        return sanitized if sanitized else f"opt-{index}"
 
     def _build_options(self) -> list[Option]:
         """Build OptionList options from choices or rich options param."""
@@ -394,11 +408,11 @@ class ChooseScreen(Screen[str | list[str] | dict[str, str]]):
                 Option(
                     f"{o.get('label', o['value'])}"
                     + (f"\n[dim]{o['description']}[/dim]" if o.get("description") else ""),
-                    id=o["value"],
+                    id=self._sanitize_option_id(o["value"], i),
                 )
-                for o in self._options
+                for i, o in enumerate(self._options)
             ]
-        return [Option(c, id=c) for c in self._choices]
+        return [Option(c, id=f"choice-{i}") for i, c in enumerate(self._choices)]
 
     def compose(self) -> ComposeResult:
         """Compose the choice selection dialog UI."""
@@ -408,8 +422,9 @@ class ChooseScreen(Screen[str | list[str] | dict[str, str]]):
             if notes_w:
                 yield notes_w
             if self._multiple:
-                for choice in self._choices:
-                    yield Button(f"☐ {choice}", id=f"choice-{choice}", classes="choice-btn")
+                with Vertical(id="choose-buttons"):
+                    for i, choice in enumerate(self._choices):
+                        yield Button(f"☐ {choice}", id=f"choice-{i}", classes="choice-btn")
                 with Horizontal():
                     yield Button("Done", variant="success", id="done")
                     yield Button("Cancel", variant="error", id="cancel")
@@ -422,7 +437,10 @@ class ChooseScreen(Screen[str | list[str] | dict[str, str]]):
     @on(OptionList.OptionSelected, "#choose-list")
     def _on_option_selected(self, event: OptionList.OptionSelected) -> None:
         """Immediately dismiss on option selection (Enter key)."""
-        self.dismiss(str(event.option.id))
+        option_id = str(event.option.id)
+        # Check choices map first (index-based IDs), then options map (sanitized value IDs)
+        value = self._choice_index_map.get(option_id) or self._option_value_map.get(option_id, option_id)
+        self.dismiss(value)
 
     @on(Input.Submitted, "#custom-input")
     def _on_custom_submit(self, event: Input.Submitted) -> None:
@@ -435,8 +453,8 @@ class ChooseScreen(Screen[str | list[str] | dict[str, str]]):
     def _toggle_choice(self, event: Button.Pressed) -> None:
         """Toggle a choice button selection state."""
         btn = event.button
-        label = str(btn.label)
-        choice = label.lstrip("☐☑ ")
+        btn_id = btn.id or ""
+        choice = self._choice_index_map.get(btn_id, str(btn.label).lstrip("☐☑ "))
         if choice in self._selected:
             self._selected.discard(choice)
             btn.label = f"☐ {choice}"
