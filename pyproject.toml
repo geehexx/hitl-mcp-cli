@@ -24,7 +24,7 @@ classifiers = [
 dependencies = [
     "fastmcp>=2.13.0",
     "inquirerpy>=0.3.4",
-    "rich>=13.0.0",
+    "rich>=15.0.0",
 ]
 
 [project.optional-dependencies]
