@@ -1,0 +1,158 @@
+# hitl-mcp-cli
+
+> Human-in-the-Loop MCP Server — lets AI agents pause and request human confirmation, input, or a decision before proceeding with sensitive or ambiguous actions.
+
+## What it does
+
+hitl-mcp-cli is an MCP server that bridges AI autonomy and human judgment. When an AI agent encounters a decision point that requires human input — ambiguous requirements, destructive operations, multi-option choices — it calls one of the HITL tools. The server surfaces the request in a terminal UI (TUI) and blocks until the human responds.
+
+Key capabilities:
+- Collect free-form text, file paths, or multiline input from a human
+- Present multiple-choice options (single or multi-select, with fuzzy search)
+- Gate destructive or sensitive operations behind a yes/no confirmation
+- Send non-blocking notifications (success, warning, error, info)
+- Log all interactions to `~/.local/state/hitl-mcp/interactions.jsonl`
+- Group requests by agent name and project ID in a sessions panel
+- Show step progress indicators (Step X/Y) in the TUI header
+
+## Transport
+
+The server runs over **streamable-http** on `http://127.0.0.1:5555/mcp` by default. It requires `"timeout": 0` in the MCP client config because human response time is unbounded.
+
+## MCP Surface (v1.0)
+
+### Tools (agent-callable, blocking)
+
+| Tool | Purpose |
+|------|---------|
+| `hitl_collect` | Collect a single text, path, or multiline value |
+| `hitl_ask` | Alias for `hitl_collect` |
+| `hitl_choose` | Present a list of options; returns the selected value(s) |
+| `hitl_confirm` | Yes/no gate; supports severity levels and optional timeout |
+| `hitl_notify` | Non-blocking notification (success/info/warning/error) |
+
+### Resources (readable state snapshots)
+
+| URI | Content |
+|-----|---------|
+| `queue://pending` | Interactions currently awaiting human response |
+| `queue://history` | Full interaction history for the session |
+| `session://activity` | Per-agent/project activity summary |
+| `session://last-user-action-age` | Seconds since the last human response |
+
+### Prompts (reusable templates, user-invoked)
+
+| Name | Use case |
+|------|---------|
+| `hitl_architectural_fork` | Architecture decision with multiple approaches |
+| `hitl_destructive_action` | Confirmation template for destructive operations |
+| `hitl_scope_clarification` | Clarify ambiguous requirements |
+| `hitl_panel_vote_summary` | Multi-option vote with rationale |
+
+## Installation
+
+```bash
+# Run without installing
+uvx hitl-mcp-cli
+
+# Install globally
+uv tool install hitl-mcp-cli
+```
+
+## MCP client configuration
+
+```json
+{
+  "mcpServers": {
+    "hitl": {
+      "url": "http://127.0.0.1:5555/mcp",
+      "transport": "streamable-http",
+      "timeout": 0
+    }
+  }
+}
+```
+
+## Usage examples
+
+### Claude Desktop / Claude Code
+
+Add the config above to `claude_desktop_config.json` or `.mcp.json`. The tools appear automatically. Call them from system prompt or tool use:
+
+```
+Before deleting files, call hitl_confirm with severity="high".
+Before starting a multi-step workflow, call hitl_collect to confirm the target directory.
+```
+
+### Kiro / Amazon Q Developer
+
+Same streamable-http config. Add to `.kiro/settings/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "hitl": {
+      "url": "http://127.0.0.1:5555/mcp",
+      "transport": "streamable-http",
+      "timeout": 0
+    }
+  }
+}
+```
+
+### Codex / OpenAI agents
+
+Use the MCP client SDK with the streamable-http transport. Point to `http://127.0.0.1:5555/mcp` and set request timeout to 0 (or the maximum your client supports).
+
+### Cursor / Cline / Windsurf
+
+Add to your MCP settings file under `mcpServers` with the same config block above.
+
+## Tool call examples
+
+```python
+# Collect input
+name = await hitl_collect(
+    message="What should we name this project?",
+    default="my-project",
+    validation_pattern=r"^[a-z0-9-]+$"
+)
+
+# Choose from options
+env = await hitl_choose(
+    message="Deploy to which environment?",
+    choices=["Development", "Staging", "Production"],
+    default="Staging"
+)
+
+# Confirm a destructive action
+result = await hitl_confirm(
+    message="Delete 150 deprecated files?",
+    severity="high",
+    context="This cannot be undone."
+)
+if result["action"] == "accept":
+    delete_files()
+
+# Non-blocking notification
+await hitl_notify(
+    message="Deployment complete",
+    level="success",
+    title="Done"
+)
+```
+
+## Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HITL_HOST` | `127.0.0.1` | Server bind address |
+| `HITL_PORT` | `5555` | Server port |
+| `HITL_LOG_LEVEL` | `ERROR` | Log verbosity (DEBUG/INFO/WARNING/ERROR) |
+| `HITL_NO_BANNER` | `false` | Suppress startup banner |
+
+## Source
+
+- GitHub: https://github.com/geehexx/hitl-mcp-cli
+- License: Apache 2.0
+- Python 3.11+, built on FastMCP ≥2.13 and Textual ≥0.89
