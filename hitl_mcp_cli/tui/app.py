@@ -193,7 +193,7 @@ class HITLApp(App[None]):
     def _update_status_bar(self) -> None:
         try:
             self.query_one("#status-bar", Label).update(self._status_text())
-        except Exception:
+        except Exception:  # nosec B110
             pass  # Not yet composed
 
     def watch_min_level(self, level: str) -> None:
@@ -208,7 +208,7 @@ class HITLApp(App[None]):
     def watch_sessions_visible(self, visible: bool) -> None:
         try:
             self.query_one("#sessions-pane").display = visible
-        except Exception:
+        except Exception:  # nosec B110
             pass
 
     # --- Actions ---
@@ -236,7 +236,7 @@ class HITLApp(App[None]):
         label = "Queue  [[-] Collapse All]" if self._queue_expanded else "Queue  [[+] Expand All]"
         try:
             self.query_one("#queue-title", Label).update(label)
-        except Exception:
+        except Exception:  # nosec B110
             pass
 
     @on(DataTable.RowSelected, "#queue-table")
@@ -287,7 +287,7 @@ class HITLApp(App[None]):
             elapsed_text = Text(f"{elapsed}s", style="dim", justify="right")
             try:
                 qt.update_cell(request_id, "elapsed", elapsed_text, update_width=False)
-            except Exception:
+            except Exception:  # nosec B110
                 pass
 
     # --- Sessions table rebuild ---
@@ -349,7 +349,7 @@ class HITLApp(App[None]):
         # Hide placeholder on first real session
         try:
             self.query_one("#sessions-placeholder").display = False
-        except Exception:
+        except Exception:  # nosec B110
             pass
 
         if session_id not in self._sessions:
@@ -563,5 +563,5 @@ class HITLApp(App[None]):
                     Text(answer_preview[:30], style="dim"),
                     update_width=False,
                 )
-        except Exception:
+        except Exception:  # nosec B110
             pass
