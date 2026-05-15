@@ -7,7 +7,7 @@ import time
 from typing import Any, ClassVar
 
 import pytest
-from textual.widgets import Button, DataTable, Input, Label, OptionList, RichLog, TextArea
+from textual.widgets import Button, DataTable, Input, Label, OptionList, TextArea
 
 from hitl_mcp_cli.tui.app import HITLApp, _queue_status_text, _session_style
 from hitl_mcp_cli.tui.queue import HITLQueue, HITLRequest
@@ -51,7 +51,9 @@ class TestHITLApp:
         queue = HITLQueue()
         app = _TestApp(hitl_queue=queue)
         async with app.run_test() as _:
-            assert app.query_one("#output-log", RichLog) is not None
+            from hitl_mcp_cli.tui.app import ActivityStream
+
+            assert app.query_one("#output-log", ActivityStream) is not None
             assert app.query_one("#status-bar", Label) is not None
 
     @pytest.mark.asyncio
@@ -60,8 +62,10 @@ class TestHITLApp:
         app = _TestApp(hitl_queue=queue)
         async with app.run_test() as _:
             app.stream_output("test-agent", "hello world", "info")
-            log = app.query_one("#output-log", RichLog)
-            assert log is not None
+            from hitl_mcp_cli.tui.app import ActivityStream
+
+            stream = app.query_one("#output-log", ActivityStream)
+            assert stream is not None
 
     @pytest.mark.asyncio
     async def test_stream_output_levels(self) -> None:
@@ -881,12 +885,14 @@ class TestStreamOutputFiltering:
         app = _TestApp(hitl_queue=HITLQueue())
         async with app.run_test(size=(120, 40)) as pilot:
             app.min_level = "INFO"
-            log = app.query_one("#output-log", RichLog)
-            line_count_before = len(log.lines)
+            from hitl_mcp_cli.tui.app import ActivityStream
+
+            stream = app.query_one("#output-log", ActivityStream)
+            section_count_before = len(stream._sections)
             app.stream_output("agent", "debug message", "debug")
             await pilot.pause()
-            # Line count should not increase (filtered out)
-            assert len(log.lines) == line_count_before
+            # Section should not be created (filtered out)
+            assert len(stream._sections) == section_count_before
 
     @pytest.mark.asyncio
     async def test_warning_passes_at_info_level(self) -> None:
@@ -894,11 +900,13 @@ class TestStreamOutputFiltering:
         app = _TestApp(hitl_queue=HITLQueue())
         async with app.run_test(size=(120, 40)) as pilot:
             app.min_level = "INFO"
-            log = app.query_one("#output-log", RichLog)
-            line_count_before = len(log.lines)
+            from hitl_mcp_cli.tui.app import ActivityStream
+
+            stream = app.query_one("#output-log", ActivityStream)
+            section_count_before = len(stream._sections)
             app.stream_output("agent", "warning message", "warning")
             await pilot.pause()
-            assert len(log.lines) > line_count_before
+            assert len(stream._sections) > section_count_before
 
     @pytest.mark.asyncio
     async def test_stream_output_markdown_path(self) -> None:
@@ -906,9 +914,9 @@ class TestStreamOutputFiltering:
         app = _TestApp(hitl_queue=HITLQueue())
         async with app.run_test(size=(120, 40)) as pilot:
             app.min_level = "DEBUG"
-            log = app.query_one("#output-log", RichLog)
-            line_count_before = len(log.lines)
-            # Markdown-like content triggers _has_markdown
+            from hitl_mcp_cli.tui.app import ActivityStream
+
+            stream = app.query_one("#output-log", ActivityStream)
             app.stream_output("agent", "# Header\n\n- item1\n- item2", "info")
             await pilot.pause()
-            assert len(log.lines) > line_count_before
+            assert "agent" in stream._sections

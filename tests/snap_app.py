@@ -12,9 +12,9 @@ from typing import ClassVar
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.widgets import DataTable, Footer, Header, Label, RichLog
+from textual.widgets import DataTable, Footer, Header, Label
 
-from hitl_mcp_cli.tui.app import HITLApp
+from hitl_mcp_cli.tui.app import ActivityStream, HITLApp
 from hitl_mcp_cli.tui.queue import HITLQueue
 
 
@@ -40,7 +40,7 @@ class _SnapApp(HITLApp):
                 )
             with Vertical(id="activity-pane"):
                 yield Label("Activity", classes="pane-title")
-                yield RichLog(id="output-log", highlight=True, auto_scroll=True, markup=True, wrap=True)
+                yield ActivityStream()
             with Vertical(id="queue-pane"):
                 yield Label("Queue  [[+] Expand All]", id="queue-title", classes="pane-title")
                 yield DataTable(id="queue-table", show_cursor=True, zebra_stripes=True, cursor_type="row")

@@ -16,10 +16,10 @@ from rich.text import Text
 from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.screen import Screen
-from textual.widgets import DataTable, Footer, Header, Label, RichLog
+from textual.widgets import Collapsible, DataTable, Footer, Header, Label, RichLog
 
 from .queue import HITLQueue
 from .screens import _MINIMIZED, _expand_escapes, _has_markdown, screen_for
@@ -27,6 +27,12 @@ from .screens import _MINIMIZED, _expand_escapes, _has_markdown, screen_for
 logger = logging.getLogger(__name__)
 
 _CSS_DIR = Path(__file__).parent
+
+# Status icons for agent sections
+_ICON_IDLE = "○"
+_ICON_ACTIVE = "●"
+_ICON_ERROR = "✕"
+_ICON_SUCCESS = "✓"
 
 LOG_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR"]
 LEVEL_STYLES = {"DEBUG": "dim", "INFO": "blue", "WARNING": "yellow", "ERROR": "red"}
@@ -59,10 +65,105 @@ def _queue_status_text(status: str) -> Text:
     return Text(status, style="dim")
 
 
+class AgentSection(ScrollableContainer):
+    """Collapsible section for a single agent's activity stream."""
+
+    DEFAULT_CSS = """
+    AgentSection {
+        height: auto;
+        margin-bottom: 1;
+    }
+    """
+
+    def __init__(self, agent_name: str) -> None:
+        super().__init__()
+        self._agent_name = agent_name
+        self._status_icon = _ICON_IDLE
+        self._last_action = ""
+        self._collapsed = True
+
+    def compose(self) -> ComposeResult:
+        title = self._make_title()
+        with Collapsible(title=title, collapsed=self._collapsed):
+            yield RichLog(
+                id=f"agent-log-{self._agent_name}",
+                highlight=True,
+                markup=True,
+                wrap=True,
+                auto_scroll=True,
+            )
+
+    def _make_title(self) -> str:
+        last = f" — {self._last_action}" if self._last_action else ""
+        return f"{self._status_icon} {self._agent_name}{last}"
+
+    def _refresh_title(self) -> None:
+        try:
+            self.query_one(Collapsible).title = self._make_title()
+        except Exception:
+            pass
+
+    def append_message(self, message: str, level: str) -> None:
+        from rich.markdown import Markdown as RichMarkdown
+
+        icon_map = {"error": _ICON_ERROR, "success": _ICON_SUCCESS}
+        self._status_icon = icon_map.get(level.lower(), _ICON_ACTIVE)
+        self._last_action = message[:50].replace("\n", " ")
+        self._refresh_title()
+
+        try:
+            log = self.query_one(RichLog)
+        except Exception:
+            return
+
+        level_styles = {
+            "success": "green",
+            "error": "red",
+            "warning": "yellow",
+            "info": "blue",
+        }
+        style = level_styles.get(level.lower(), "blue")
+        msg = _expand_escapes(message)
+        if _has_markdown(msg):
+            log.write(RichMarkdown(msg))
+        else:
+            log.write(f"[{style}]{msg}[/{style}]")
+
+
+class ActivityStream(ScrollableContainer):
+    """Center-pane widget: per-agent collapsible sections."""
+
+    DEFAULT_CSS = """
+    ActivityStream {
+        height: 1fr;
+        overflow-y: auto;
+    }
+    """
+
+    def __init__(self) -> None:
+        super().__init__(id="output-log")
+        self._sections: dict[str, AgentSection] = {}
+
+    def compose(self) -> ComposeResult:
+        yield from ()
+
+    def get_or_create_section(self, agent: str) -> AgentSection:
+        if agent not in self._sections:
+            section = AgentSection(agent)
+            self._sections[agent] = section
+            self.mount(section)
+        return self._sections[agent]
+
+    def clear(self) -> None:
+        for section in self._sections.values():
+            section.remove()
+        self._sections.clear()
+
+
 class HITLApp(App[None]):
     """Three-pane TUI for HITL MCP interactions.
 
-    Left: Sessions DataTable. Center: RichLog activity. Right: Queue DataTable.
+    Left: Sessions DataTable. Center: ActivityStream. Right: Queue DataTable.
     """
 
     CSS_PATH: ClassVar[list[Any]] = [_CSS_DIR / "hitl.tcss"]
@@ -117,7 +218,7 @@ class HITLApp(App[None]):
                 )
             with Vertical(id="activity-pane"):
                 yield Label("Activity", classes="pane-title")
-                yield RichLog(id="output-log", highlight=True, auto_scroll=True, markup=True, wrap=True)
+                yield ActivityStream()
             with Vertical(id="queue-pane"):
                 yield Label("Queue  [+]", id="queue-title", classes="pane-title")
                 yield DataTable(id="queue-table", show_cursor=True, zebra_stripes=True, cursor_type="row")
@@ -128,7 +229,11 @@ class HITLApp(App[None]):
         level = self.min_level
         style = LEVEL_STYLES.get(level, "blue")
         queue_style = "bold yellow" if self.queue_count > 0 else "dim"
-        return f"[{style}]{level}[/{style}]  Sessions: {self.session_count}  Queue: [{queue_style}]{self.queue_count}[/{queue_style}]"
+        return (
+            f"[{style}]{level}[/{style}]"
+            f"  Sessions: {self.session_count}"
+            f"  Queue: [{queue_style}]{self.queue_count}[/{queue_style}]"
+        )
 
     def on_mount(self) -> None:
         """Initialize tables, start server + queue worker."""
@@ -149,16 +254,17 @@ class HITLApp(App[None]):
             ("Elapsed", "elapsed"),
         )
 
-        log = self.query_one("#output-log", RichLog)
         from hitl_mcp_cli import __version__ as _v
 
-        log.write(f"[bold cyan]HITL MCP Server[/bold cyan] [dim]v{_v}[/dim]")
-        log.write(f"[dim]Listening on http://{self._host}:{self._port}[/dim]")
-        log.write(
-            "[dim]Press [bold]q[/bold] to quit, [bold]f2[/bold] log level, [bold]ctrl+l[/bold] clear, "
-            "[bold]ctrl+e[/bold] expand/collapse queue[/dim]"
+        self.stream_output(
+            "server",
+            f"[bold cyan]HITL MCP Server[/bold cyan] [dim]v{_v}[/dim]"
+            f"\n[dim]Listening on http://{self._host}:{self._port}[/dim]"
+            "\n[dim]Press [bold]q[/bold] to quit, "
+            "[bold]f2[/bold] log level, [bold]ctrl+l[/bold] clear, "
+            "[bold]ctrl+e[/bold] expand/collapse queue[/dim]",
+            "info",
         )
-        log.write("")
 
         if self._mcp_app is not None:
             self._server_thread = threading.Thread(
@@ -215,7 +321,7 @@ class HITLApp(App[None]):
     # --- Actions ---
 
     def action_clear_log(self) -> None:
-        self.query_one("#output-log", RichLog).clear()
+        self.query_one("#output-log", ActivityStream).clear()
 
     def action_toggle_sessions(self) -> None:
         self.sessions_visible = not self.sessions_visible
@@ -317,23 +423,18 @@ class HITLApp(App[None]):
     # --- Public API (called from server thread) ---
 
     def stream_output(self, agent: str, message: str, level: str = "info") -> None:
-        """Append to RichLog. Call via call_from_thread from server thread."""
-        from rich.markdown import Markdown as RichMarkdown
-
+        """Route message to the agent's collapsible section in the activity stream."""
         level_order = {"debug": 0, "info": 1, "warning": 2, "error": 3, "success": 1}
         min_order = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3}.get(self.min_level, 1)
         if level_order.get(level.lower(), 1) < min_order:
             return
 
-        level_styles = {"success": "green", "error": "red", "warning": "yellow", "info": "blue"}
-        style = level_styles.get(level, "blue")
-        log = self.query_one("#output-log", RichLog)
-        message = _expand_escapes(message)
-        log.write(f"[{style}]{agent}:[/{style}]")
-        if _has_markdown(message):
-            log.write(RichMarkdown(message))
-        else:
-            log.write(message)
+        try:
+            stream = self.query_one("#output-log", ActivityStream)
+            section = stream.get_or_create_section(agent)
+            section.append_message(message, level)
+        except Exception:
+            pass
 
     def record_session_activity(
         self, session_id: str, tool: str, project_id: str | None = None, client_name: str | None = None
@@ -497,7 +598,8 @@ class HITLApp(App[None]):
                             self._update_queue_row_status(request.request_id, "cancelled")
                             self.stream_output(
                                 "queue",
-                                f"✕ [bold]{request.tool}[/bold] \\[{client_name}] — cancelled (elapsed: {elapsed:.1f}s)",
+                                f"✕ [bold]{request.tool}[/bold] \\[{client_name}]"
+                                f" — cancelled (elapsed: {elapsed:.1f}s)",
                                 "warning",
                             )
                         else:
@@ -507,7 +609,8 @@ class HITLApp(App[None]):
                             self._update_queue_row_status(request.request_id, "answered", preview)
                             self.stream_output(
                                 "queue",
-                                f"✓ [bold]{request.tool}[/bold] \\[{client_name}] — {action} (elapsed: {elapsed:.1f}s)",
+                                f"✓ [bold]{request.tool}[/bold] \\[{client_name}]"
+                                f" — {action} (elapsed: {elapsed:.1f}s)",
                                 "success",
                             )
                         self._hitl_queue.resolve(request, result)
