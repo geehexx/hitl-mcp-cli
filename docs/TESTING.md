@@ -4,16 +4,28 @@
 
 ```
 tests/
-├── test_server.py    # MCP server and tool tests
-├── test_ui.py        # UI component tests
-└── test_cli.py       # CLI integration tests
+├── test_server.py              # MCP server and tool tests
+├── test_mcp_integration.py     # Full MCP protocol integration tests
+├── test_prompts.py             # UI prompt tests
+├── test_edge_cases.py          # Edge case and boundary tests
+├── test_error_handling.py      # Error handling tests
+├── test_timeout_handling.py    # Timeout scenario tests
+├── test_logging.py             # Interaction logging tests
+├── test_selection_regression.py # Selection regression tests
+├── test_fuzzy_search.py        # Fuzzy search tests
+├── test_multiline_terminal.py  # Multiline terminal behavior tests
+├── test_transport.py           # Transport layer tests
+├── test_feedback.py            # Visual feedback tests
+├── test_ui.py                  # UI component tests
+├── test_cli.py                 # CLI unit tests
+└── test_cli_integration.py     # CLI integration tests
 ```
 
 ## Running Tests
 
 ### All Tests
 ```bash
-uv run pytest
+uv run poe test
 ```
 
 ### Specific Test File
@@ -27,9 +39,9 @@ uv run pytest --cov --cov-report=html
 open htmlcov/index.html
 ```
 
-### Watch Mode
+### All Checks (lint + type check + tests)
 ```bash
-uv run pytest-watch
+uv run poe check
 ```
 
 ## Test Categories
@@ -40,23 +52,59 @@ Test the full MCP protocol flow with minimal mocking:
 
 ```python
 @pytest.mark.asyncio
-async def test_request_text_input_tool(mcp_client: Client) -> None:
+async def test_hitl_collect_tool(mcp_client: Client) -> None:
     with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock:
         mock.return_value = "Test Input"
-        result = await mcp_client.call_tool("request_text_input", {...})
+        result = await mcp_client.call_tool("hitl_collect", {...})
         assert result.data == "Test Input"
 ```
 
 **What we test**:
 - MCP protocol initialization
-- Tool registration and schemas
+- Tool registration and schemas (`hitl_collect`, `hitl_ask`, `hitl_choose`, `hitl_confirm`, `hitl_notify`)
 - Tool invocation
 - Parameter validation
 - Error handling
 
-### 2. Unit Tests (`test_ui.py`)
+### 2. Textual Pilot Tests (`test_tui_pilot.py`)
 
-Test UI components in isolation:
+Test TUI interactions using Textual's `Pilot` automation:
+
+```python
+@pytest.mark.asyncio
+async def test_collect_screen_submit() -> None:
+    app = HITLApp(queue=queue)
+    async with app.run_test() as pilot:
+        await pilot.press("H", "e", "l", "l", "o")
+        await pilot.press("enter")
+        assert future.result() == "Hello"
+```
+
+**What we test** (23 tests):
+- All screen types: CollectScreen, ChooseScreen, ConfirmScreen, NotifyScreen
+- Input submission and cancellation
+- Validation feedback
+- Collapsible message expand/collapse
+- Queue row click interactions
+- Session panel toggle
+
+### 3. Snapshot Tests (`test_tui_snapshots.py`)
+
+Visual regression tests using `pytest-textual-snapshot`:
+
+```bash
+# Update snapshots after intentional UI changes
+uv run pytest --snapshot-update tests/test_tui_snapshots.py
+
+# Run snapshot comparison
+uv run pytest tests/test_tui_snapshots.py
+```
+
+Snapshots are stored as SVG files in `tests/snapshots/`. Commit them alongside code changes.
+
+### 4. Unit Tests (`test_ui.py`)
+
+Test components in isolation:
 
 ```python
 def test_show_success() -> None:
@@ -66,11 +114,10 @@ def test_show_success() -> None:
 ```
 
 **What we test**:
-- Banner display
 - Feedback messages
 - Component behavior
 
-### 3. CLI Tests (`test_cli.py`)
+### 5. CLI Tests (`test_cli.py`)
 
 Test command-line interface:
 
@@ -163,7 +210,7 @@ def test_1():
 
 ✅ Good:
 ```python
-def test_request_text_input_returns_user_input():
+def test_hitl_collect_returns_user_input():
     ...
 ```
 
@@ -250,7 +297,7 @@ CI checks:
 - All tests pass
 - Coverage meets thresholds
 - Type checking (mypy)
-- Linting (ruff, black, isort)
+- Linting and formatting (ruff)
 
 ## Debugging Tests
 
@@ -304,7 +351,7 @@ test_choices = [f"Option {i}" for i in range(1000)]
 
 ✅ Mock:
 - External services
-- User input (InquirerPy)
+- User input (Textual Pilot for TUI, AsyncMock for server-level)
 - File system operations
 - Network calls
 - Time-dependent operations

@@ -14,7 +14,7 @@ Thank you for your interest in contributing! This document provides guidelines a
 ### Prerequisites
 
 - Python 3.11 or higher
-- uv (recommended) or pip
+- [uv](https://docs.astral.sh/uv/) package manager
 - Git
 
 ### Development Setup
@@ -88,7 +88,7 @@ uv run pytest && uv run mypy hitl_mcp_cli/ && uv run ruff check . && uv run blac
 - Update README.md if adding user-facing features
 - Update CHANGELOG.md following Keep a Changelog format
 - Update docs/ if changing architecture or testing
-- Add to docs/FUTURE.md if deferring enhancements
+- Add to docs/ROADMAP.md if deferring enhancements
 
 ### 6. Commit Changes
 
@@ -162,7 +162,7 @@ async def test_your_feature(mcp_client):
     with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock:
         mock.return_value = "expected"
 
-        result = await mcp_client.call_tool("request_text_input", {"prompt": "Test"})
+        result = await mcp_client.call_tool("hitl_collect", {"message": "Test"})
 
         assert result is not None
         assert not result.is_error

@@ -2,7 +2,7 @@
 
 import subprocess
 import sys
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
 def test_cli_help() -> None:
@@ -20,37 +20,30 @@ def test_cli_help() -> None:
     assert "--no-banner" in result.stdout
 
 
-def test_banner_display() -> None:
-    """Test banner displays correctly."""
-    from io import StringIO
-
-    from rich.console import Console
-
-    from hitl_mcp_cli.ui import display_banner
-
-    # Capture output
-    output = StringIO()
-    test_console = Console(file=output, force_terminal=True, width=120)
-
-    with patch("hitl_mcp_cli.ui.banner.console", test_console):
-        display_banner(host="localhost", port=8080)
-
-    result = output.getvalue()
-    assert "localhost" in result
-    assert "8080" in result
+def test_cli_no_tui_flag_removed() -> None:
+    """Test --no-tui flag is no longer present."""
+    result = subprocess.run(
+        [sys.executable, "-m", "hitl_mcp_cli.cli", "--help"],
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    assert "--no-tui" not in result.stdout
 
 
-def test_banner_no_duplicate_output() -> None:
-    """Test banner displays only once."""
-    from io import StringIO
+def test_cli_launches_tui() -> None:
+    """Test CLI always launches TUI app."""
+    from hitl_mcp_cli.cli import main
 
-    from rich.console import Console
-
-    from hitl_mcp_cli.ui import display_banner
-
-    output = StringIO()
-    test_console = Console(file=output, force_terminal=True, width=120)
-    with patch("hitl_mcp_cli.ui.banner.console", test_console):
-        display_banner(host="localhost", port=8080)
-    result = output.getvalue()
-    assert result.count("Streamable-HTTP") == 1
+    with (
+        patch("sys.argv", ["hitl-mcp"]),
+        patch("hitl_mcp_cli.server.configure_tui_mode") as mock_configure,
+        patch("hitl_mcp_cli.tui.HITLApp") as mock_app_cls,
+        patch("hitl_mcp_cli.tui.queue.HITLQueue"),
+        patch("hitl_mcp_cli.cli.mcp") as mock_mcp,
+    ):
+        mock_mcp.http_app.return_value = MagicMock()
+        mock_app_cls.return_value = MagicMock()
+        main()
+        mock_configure.assert_called_once()
+        mock_app_cls.return_value.run.assert_called_once()

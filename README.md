@@ -59,14 +59,14 @@ HITL MCP CLI provides a **standardized, elegant interface** for AI agents to req
 
 ## ✨ Features
 
-- **🎯 5 Interactive Tools**: Text input, selection, confirmation, path input, and notifications
-- **🎨 Beautiful Terminal UI**: Icons, gradients, and smooth animations
+- **🎯 5 Interactive Tools**: Collect input, ask questions, choose from options, confirm actions, and send notifications
+- **🖥️ Full TUI**: Textual-based terminal UI with sessions panel, queue history, and collapsible messages
 - **🚀 Instant Setup**: Works with `uvx` — no installation required
 - **🔌 MCP Standard**: Seamless integration with any MCP-compatible AI agent
 - **⚡ Lightning Fast**: Async-first design with minimal overhead
 - **🛡️ Type-Safe**: Full type hints for reliability and IDE support
-- **🌈 Visual Feedback**: Loading indicators and status messages
-- **🔧 Customizable**: Disable animations, customize host/port
+- **📊 Interaction Logging**: All tool calls logged to `~/.local/state/hitl-mcp/interactions.jsonl`
+- **🔧 Customizable**: Customize host/port, log level
 
 ---
 
@@ -88,28 +88,21 @@ uvx hitl-mcp-cli
 
 # Or install globally
 uv tool install hitl-mcp-cli
-
-# Or use pip
-pip install hitl-mcp-cli
 ```
 
 ### Start the Server
 
 ```bash
-# Default: localhost:5555
+# Default: TUI mode on localhost:5555
 hitl-mcp
 
 # Custom host/port
 hitl-mcp --host 0.0.0.0 --port 8080
 
-# Disable banner
-hitl-mcp --no-banner
-
 # Using environment variables
 export HITL_HOST=0.0.0.0
 export HITL_PORT=8080
 export HITL_LOG_LEVEL=INFO
-export HITL_NO_BANNER=true
 hitl-mcp
 ```
 
@@ -137,179 +130,207 @@ Add to your MCP client configuration (e.g., Claude Desktop, Cline):
 
 **⚠️ Important**: Set `"timeout": 0` for infinite timeout. Human input is unpredictable - users may take seconds or minutes to respond. The default 60-second MCP timeout will cause tool calls to fail if users don't respond quickly enough.
 
+> **Note**: The server runs in stateless HTTP mode, which is required for MCP clients
+> that make independent HTTP requests (including Kiro CLI and most MCP clients).
+
 **That's it!** Your AI agent can now request human input.
 
 ---
 
 ## 🛠️ Available Tools
 
-### 1. `request_text_input` — Collect Text Input
+### 1. `hitl_collect` — Collect Input
 
-Get text from the user with optional validation.
+Collect a single input value from the user. Use for text, file paths, or multiline content.
 
 **When to use**:
 - Collecting names, descriptions, or free-form input
-- Getting configuration values
-- Requesting API keys or credentials (with validation)
+- Getting file/directory paths with completion
+- Requesting multi-line content (code snippets, descriptions)
 
 **Example**:
 ```python
-name = await request_text_input(
-    prompt="What should we name this project?",
+name = await hitl_collect(
+    message="What should we name this project?",
     default="my-project",
-    validate_pattern=r"^[a-z0-9-]+$"  # Only lowercase, numbers, hyphens
+    validation_pattern=r"^[a-z0-9-]+$"
+)
+
+# Path input
+config = await hitl_collect(
+    message="Select configuration file:",
+    input_type="path"
+)
+
+# Multiline input
+description = await hitl_collect(
+    message="Enter project description:",
+    input_type="multiline"
 )
 ```
 
 **Parameters**:
-- `prompt` (str): Question to display
+- `message` (str): Question to display
+- `input_type` (Literal["text", "path", "multiline"]): Input mode (default: "text")
 - `default` (str, optional): Pre-filled value
-- `multiline` (bool): Enable multi-line input for longer text
-- `validate_pattern` (str, optional): Regex pattern for validation
+- `validation_pattern` (str, optional): Regex pattern for validation
+- `validation_message` (str, optional): Custom validation error message
+- `context` (str, optional): Additional context displayed above the prompt
+- `strip_whitespace` (bool): Strip leading/trailing whitespace from input (default: False)
+- `required` (bool): Reject empty input (default: False)
+- `path_type` (Literal["file", "dir", "any"], optional): Validate path type when `input_type="path"`
+- `agent_name` (str, optional): Calling agent identifier (shown in Sessions panel)
+- `project_id` (str, optional): Project identifier for session grouping
+- `step` (int, optional): Current step number (shown as "Step X/Y")
+- `total_steps` (int, optional): Total steps in workflow
+- `notes` (str, optional): Freeform context displayed as a dimmed line below the message
 
 ---
 
-### 2. `request_selection` — Present Choices
+### 2. `hitl_ask` — Ask a Question
 
-Let the user choose from predefined options (single or multiple).
+Alias for `hitl_collect`. Use whichever name reads more naturally in your agent's workflow.
+
+---
+
+### 3. `hitl_choose` — Present Choices
+
+Present a list of options for the user to select from. Supports single or multiple selection, fuzzy search for long lists, and rich option descriptions.
 
 **When to use**:
 - Choosing between implementation approaches
 - Selecting deployment environments
 - Picking features to enable
-- Configuring options from a known set
 
 **Example**:
 ```python
-# Single choice
-env = await request_selection(
-    prompt="Which environment should I deploy to?",
+# Simple choices
+env = await hitl_choose(
+    message="Which environment should I deploy to?",
     choices=["Development", "Staging", "Production"],
     default="Staging"
 )
 
-# Multiple choices
-features = await request_selection(
-    prompt="Which features should I enable?",
+# Rich options with descriptions
+approach = await hitl_choose(
+    message="Select implementation approach:",
+    options=[
+        {"value": "fast", "label": "Fast", "description": "Quick but uses more memory"},
+        {"value": "safe", "label": "Safe", "description": "Slower but reliable"},
+    ]
+)
+
+# Multiple selections
+features = await hitl_choose(
+    message="Which features should I enable?",
     choices=["Authentication", "Caching", "Logging", "Monitoring"],
-    allow_multiple=True
+    multiple=True
 )
 ```
 
 **Parameters**:
-- `prompt` (str): Question to display
-- `choices` (list[str]): Available options
+- `message` (str): Question to display
+- `choices` (list[str], optional): Simple option strings
+- `options` (list[dict], optional): Rich options with value/label/description
+- `multiple` (bool): Enable checkbox mode (default: False)
 - `default` (str, optional): Pre-selected option
-- `allow_multiple` (bool): Enable checkbox mode for multiple selections
+- `fuzzy_search` (bool, optional): Force fuzzy search on/off (auto for >15 items)
+- `context` (str, optional): Additional context displayed above the prompt
+- `agent_name` (str, optional): Calling agent identifier (shown in Sessions panel)
+- `project_id` (str, optional): Project identifier for session grouping
+- `step` (int, optional): Current step number (shown as "Step X/Y")
+- `total_steps` (int, optional): Total steps in workflow
+- `notes` (str, optional): Freeform context displayed as a dimmed line below the message
+
+> **Escape hatch**: In multiple-selection mode, if the user selects all or none of the options, they are offered a free-text input to explain their intent.
 
 ---
 
-### 3. `request_confirmation` — Get Yes/No Approval
+### 4. `hitl_confirm` — Get Confirmation
 
-Request explicit approval before proceeding.
+Ask the user to confirm or reject an action. Use severity='high' for destructive operations.
 
 **When to use**:
 - Before destructive operations (delete, overwrite)
 - Before expensive operations (API calls, deployments)
 - Confirming assumptions or interpretations
-- Validating generated code or configurations
 
 **Example**:
 ```python
-confirmed = await request_confirmation(
-    prompt="I will delete 50 unused dependencies. Proceed?",
-    default=False  # Default to safe option
+# Standard confirmation
+result = await hitl_confirm(
+    message="I will delete 50 unused dependencies. Proceed?",
+    default=False
+)
+if result["action"] == "accept":
+    ...
+
+# High severity — requires typed "yes"
+result = await hitl_confirm(
+    message="Delete production database?",
+    severity="high",
+    context="This will affect 10,000 active users.\nDowntime: ~30 seconds."
 )
 
-if confirmed:
-    # Proceed with operation
-    await delete_dependencies()
-    await notify_completion(
-        title="Cleanup Complete",
-        message="Removed 50 unused dependencies",
-        notification_type="success"
-    )
+# Timed confirmation
+result = await hitl_confirm(
+    message="Deploy to production?",
+    severity="high",
+    timeout_seconds=300
+)
+if result.get("timed_out"):
+    print("Approval timed out")
 ```
 
 **Parameters**:
-- `prompt` (str): Yes/no question
-- `default` (bool): Default answer (use `False` for destructive operations)
+- `message` (str): Yes/no question
+- `default` (bool): Default answer (default: False)
+- `severity` (Literal["low", "medium", "high"]): Confirmation intensity (default: "medium")
+- `context` (str, optional): Additional context displayed in a panel above the prompt
+- `timeout_seconds` (int): Seconds to wait, 0 = infinite (default: 0)
+- `agent_name` (str, optional): Calling agent identifier (shown in Sessions panel)
+- `project_id` (str, optional): Project identifier for session grouping
+- `step` (int, optional): Current step number (shown as "Step X/Y")
+- `total_steps` (int, optional): Total steps in workflow
+- `notes` (str, optional): Freeform context displayed as a dimmed line below the message
+
+**Returns**: `{"action": "accept"|"decline"|"cancel"}`. When `timeout_seconds > 0`, also includes `"timed_out": bool`.
 
 ---
 
-### 4. `request_path_input` — Get File/Directory Paths
+### 5. `hitl_notify` — Display Notifications
 
-Collect file or directory paths with validation.
-
-**When to use**:
-- Selecting configuration files
-- Choosing output directories
-- Locating input data
-- Specifying log file locations
-
-**Example**:
-```python
-config_path = await request_path_input(
-    prompt="Select the configuration file:",
-    path_type="file",
-    must_exist=True,
-    default="./config.yaml"
-)
-
-output_dir = await request_path_input(
-    prompt="Where should I save the output?",
-    path_type="directory",
-    must_exist=False,  # Will be created if needed
-    default="./output"
-)
-```
-
-**Parameters**:
-- `prompt` (str): Question to display
-- `path_type` (Literal["file", "directory", "any"]): Expected path type
-- `must_exist` (bool): Validate that path exists
-- `default` (str, optional): Pre-filled path
-
----
-
-### 5. `notify_completion` — Display Status Notifications
-
-Show styled notifications for important events.
+Display a styled notification to the user. Non-blocking — does not wait for input.
 
 **When to use**:
 - Confirming successful operations
 - Reporting errors or warnings
 - Providing progress updates
-- Highlighting important information
 
 **Example**:
 ```python
-# Success notification
-await notify_completion(
-    title="Deployment Complete",
+await hitl_notify(
     message="Successfully deployed v2.1.0 to production\n\nURL: https://app.example.com",
-    notification_type="success"
+    level="success",
+    title="Deployment Complete"
 )
 
-# Warning notification
-await notify_completion(
-    title="Deprecation Warning",
+await hitl_notify(
     message="The old API will be removed in v3.0",
-    notification_type="warning"
-)
-
-# Error notification
-await notify_completion(
-    title="Build Failed",
-    message="TypeScript compilation errors found\n\nRun 'npm run type-check' for details",
-    notification_type="error"
+    level="warning",
+    title="Deprecation Warning"
 )
 ```
 
 **Parameters**:
-- `title` (str): Notification title
 - `message` (str): Detailed message (supports multi-line)
-- `notification_type` (Literal["success", "info", "warning", "error"]): Visual style
+- `level` (Literal["success", "info", "warning", "error"]): Visual style (default: "info")
+- `title` (str, optional): Notification title
+- `agent_name` (str, optional): Calling agent identifier (shown in Sessions panel)
+- `project_id` (str, optional): Project identifier for session grouping
+- `step` (int, optional): Current step number (shown as "Step X/Y")
+- `total_steps` (int, optional): Total steps in workflow
+- `notes` (str, optional): Freeform context displayed as a dimmed line below the notification
 
 ---
 
@@ -320,9 +341,8 @@ await notify_completion(
 When requirements are ambiguous, ask specific questions:
 
 ```python
-# Agent encounters ambiguous requirement
-approach = await request_selection(
-    prompt="I can implement this feature in two ways. Which do you prefer?",
+approach = await hitl_choose(
+    message="I can implement this feature in two ways. Which do you prefer?",
     choices=[
         "Option A: Fast implementation, higher memory usage",
         "Option B: Slower but more memory efficient",
@@ -330,14 +350,6 @@ approach = await request_selection(
     ],
     default="Option C: Balanced approach (recommended)"
 )
-
-# Proceed with chosen approach
-if "Option A" in approach:
-    await implement_fast_version()
-elif "Option B" in approach:
-    await implement_efficient_version()
-else:
-    await implement_balanced_version()
 ```
 
 ### Pattern 2: Approval Gate
@@ -345,25 +357,24 @@ else:
 Request approval before significant actions:
 
 ```python
-# Explain what will happen
 files_to_delete = find_unused_files()
-confirmed = await request_confirmation(
-    prompt=f"I found {len(files_to_delete)} unused files. Delete them?",
+result = await hitl_confirm(
+    message=f"I found {len(files_to_delete)} unused files. Delete them?",
     default=False
 )
 
-if confirmed:
+if result["action"] == "accept":
     delete_files(files_to_delete)
-    await notify_completion(
-        title="Cleanup Complete",
+    await hitl_notify(
         message=f"Deleted {len(files_to_delete)} unused files",
-        notification_type="success"
+        level="success",
+        title="Cleanup Complete"
     )
 else:
-    await notify_completion(
-        title="Cancelled",
+    await hitl_notify(
         message="No files were deleted",
-        notification_type="info"
+        level="info",
+        title="Cancelled"
     )
 ```
 
@@ -372,31 +383,26 @@ else:
 Collect structured data through multiple prompts:
 
 ```python
-# Gather project configuration
-project_name = await request_text_input(
-    prompt="Project name:",
-    validate_pattern=r"^[a-z0-9-]+$"
+project_name = await hitl_collect(
+    message="Project name:",
+    validation_pattern=r"^[a-z0-9-]+$"
 )
 
-language = await request_selection(
-    prompt="Programming language:",
+language = await hitl_choose(
+    message="Programming language:",
     choices=["Python", "TypeScript", "Go", "Rust"]
 )
 
-features = await request_selection(
-    prompt="Select features to include:",
+features = await hitl_choose(
+    message="Select features to include:",
     choices=["Testing", "Linting", "CI/CD", "Documentation"],
-    allow_multiple=True
+    multiple=True
 )
 
-output_dir = await request_path_input(
-    prompt="Output directory:",
-    path_type="directory",
-    must_exist=False
+output_dir = await hitl_collect(
+    message="Output directory:",
+    input_type="path"
 )
-
-# Generate project with collected information
-await generate_project(project_name, language, features, output_dir)
 ```
 
 ### Pattern 4: Progressive Disclosure
@@ -404,26 +410,24 @@ await generate_project(project_name, language, features, output_dir)
 Start with high-level choices, then drill down:
 
 ```python
-# High-level choice
-action = await request_selection(
-    prompt="What would you like to do?",
+action = await hitl_choose(
+    message="What would you like to do?",
     choices=["Deploy", "Rollback", "View Logs", "Run Tests"]
 )
 
 if action == "Deploy":
-    # Drill down for deployment
-    env = await request_selection(
-        prompt="Deploy to which environment?",
+    env = await hitl_choose(
+        message="Deploy to which environment?",
         choices=["Staging", "Production"]
     )
 
     if env == "Production":
-        # Extra confirmation for production
-        confirmed = await request_confirmation(
-            prompt="Deploy to PRODUCTION? This will affect live users.",
-            default=False
+        result = await hitl_confirm(
+            message="Deploy to PRODUCTION?",
+            context="This will affect live users.",
+            severity="high"
         )
-        if confirmed:
+        if result["action"] == "accept":
             await deploy_to_production()
 ```
 
@@ -436,12 +440,49 @@ AI Agent (Claude, GPT, etc.)
          ↓ HTTP (MCP Protocol)
     FastMCP Server
          ↓ Async Calls
-      UI Layer (InquirerPy + Rich)
+      TUI Layer (Textual)
          ↓ Terminal I/O
         User
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture documentation.
+
+---
+
+## 🖥️ TUI Features
+
+The Textual-based TUI provides a rich terminal interface:
+
+- **Sessions panel**: Shows agent names and projects, color-coded by recency (active <10min = bright, idle = normal, inactive = dim). Toggle with `ctrl+b` or `f3`.
+- **Queue panel**: Full history of all requests with color-coded status (PENDING/DONE/CANCELLED). Click any row to restore a pending request or view a summary of an answered one.
+- **Collapsible messages**: Messages longer than 200 chars are collapsed by default — click to expand, or use `ctrl+e` to expand/collapse all.
+- **Step indicators**: When `step` and `total_steps` are provided, the screen header shows "Step X/Y".
+
+### Key Bindings
+
+| Key | Action |
+|-----|--------|
+| `q` | Quit |
+| `ctrl+l` | Clear activity log |
+| `ctrl+b` | Toggle sessions panel |
+| `f2` | Cycle log level (DEBUG/INFO/WARNING/ERROR) |
+| `f3` | Toggle sessions panel (VS Code-safe alternative) |
+| `ctrl+e` | Expand/collapse all collapsible messages |
+| `escape` | Cancel/close dialog |
+
+---
+
+---
+
+## 📋 Logs
+
+HITL MCP logs every tool interaction to `~/.local/state/hitl-mcp/interactions.jsonl` as JSONL. Each entry includes tool name, duration, result type, and a preview of the message and result. The log auto-rotates at 10 MB.
+
+A sample logrotate config is provided at [contrib/logrotate.conf](contrib/logrotate.conf):
+
+```bash
+sudo cp contrib/logrotate.conf /etc/logrotate.d/hitl-mcp
+```
 
 ---
 
@@ -458,18 +499,18 @@ uv sync --all-extras
 ### Testing
 
 ```bash
-# Run all tests
-uv run pytest
+# Run tests
+uv run poe test
 
 # With coverage
 uv run pytest --cov --cov-report=html
 
-# Type checking
-uv run mypy hitl_mcp_cli/
+# Lint and format
+uv run poe lint
+uv run poe format
 
-# Linting
-uv run ruff check .
-uv run black --check .
+# All checks
+uv run poe check
 ```
 
 See [docs/TESTING.md](docs/TESTING.md) for comprehensive testing guide.
@@ -494,7 +535,7 @@ npx @modelcontextprotocol/inspector hitl-mcp
 - **[Architecture](docs/ARCHITECTURE.md)**: System design and component details
 - **[Testing Guide](docs/TESTING.md)**: Comprehensive testing documentation
 - **[Accessibility](docs/ACCESSIBILITY.md)**: Accessibility features and guidelines
-- **[Future Enhancements](docs/FUTURE.md)**: Planned improvements and ideas
+- **[Roadmap](docs/ROADMAP.md)**: Future considerations
 - **[Changelog](CHANGELOG.md)**: Version history and changes
 
 ## ♿ Accessibility
@@ -509,15 +550,22 @@ HITL MCP CLI is designed to be accessible:
 
 See [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) for detailed accessibility information, testing methodology, and recommendations for users with diverse needs.
 
-## 🔌 Plugin Framework
+---
 
-HITL MCP CLI will gain plugin support through the **[MCP Plugin Server](https://github.com/geehexx/mcp-plugin-server)** framework. This will enable:
+## 💻 VS Code Terminal
 
-- Extensible architecture with plugin-based capabilities
-- Community-contributed plugins for additional features
-- Wrapper mode to enhance HITL with new functionality
+For the best experience in VS Code's integrated terminal, add to your `settings.json`:
 
-See the [MCP Plugin Server repository](https://github.com/geehexx/mcp-plugin-server) for details on the plugin framework architecture and development.
+```json
+{
+  "terminal.integrated.allowChords": false,
+  "terminal.integrated.sendKeybindingsToShell": true
+}
+```
+
+This ensures `Ctrl+\` (command palette) and other key bindings reach the TUI.
+
+> **Note**: `ctrl+b` and `ctrl+\` may be intercepted by VS Code. Add these to `commandsToSkipShell` in your VS Code settings, or use `f2` (log level) and `f3` (toggle sessions) as alternatives.
 
 ---
 
@@ -574,7 +622,7 @@ Don't forget to update your MCP client configuration to match the new port.
 - A health check system uses GET instead of POST
 - An agent incorrectly probes the endpoint
 
-If you need a health check endpoint, this is tracked in docs/FUTURE.md as a future enhancement.
+If you need a health check endpoint, this is tracked in docs/ROADMAP.md as a future consideration.
 
 ### Verbose Server Logs
 
@@ -624,7 +672,7 @@ When integrating HITL MCP tools, handle errors appropriately:
 
 ```python
 try:
-    result = await request_text_input(prompt="Enter value:")
+    result = await hitl_collect(message="Enter value:")
 except Exception as e:
     if "User cancelled" in str(e):
         # User pressed Ctrl+C - respect their decision
@@ -640,6 +688,8 @@ except Exception as e:
         print(f"Unexpected error: {e}")
         raise
 ```
+
+> **Note**: `hitl_collect` and `hitl_confirm` return `{"action": "cancel"}` on Ctrl+C instead of raising, so check the return value first.
 
 **Error Categories**:
 - **User Cancellation** (Ctrl+C): Respect the cancellation, don't retry
@@ -673,8 +723,7 @@ Apache License 2.0 - see [LICENSE](LICENSE) for details.
 
 Built with:
 - [FastMCP](https://github.com/jlowin/fastmcp) - Fast, Pythonic MCP server framework
-- [InquirerPy](https://github.com/kazhala/InquirerPy) - Interactive terminal prompts
-- [Rich](https://github.com/Textualize/rich) - Beautiful terminal formatting
+- [Textual](https://github.com/Textualize/textual) - Modern TUI framework for Python
 
 ---
 
@@ -693,3 +742,23 @@ Built with:
 Made with ❤️ for the AI agent community
 
 </div>
+
+
+## v1.0.0rc1 — MCP three-primitive idiom
+
+As of v1.0.0rc1, the server splits its surface across the three MCP primitive types per the [MCP spec idiom](https://modelcontextprotocol.io/specification):
+
+| Primitive | Surface | What you get |
+|-----------|---------|--------------|
+| **Tools** (5) | `hitl_collect` / `hitl_ask` / `hitl_choose` / `hitl_confirm` / `hitl_notify` | Model-controlled actions; block on user response. Same signatures as v0.9.0. |
+| **Resources** (4) | `queue://pending`, `queue://history`, `session://activity`, `session://last-user-action-age` | Read-only JSON snapshots of live HITL state. Polled by clients (CC has closed subscriptions as `not_planned`). |
+| **Prompts** (4) | `hitl_architectural_fork`, `hitl_destructive_action`, `hitl_scope_clarification`, `hitl_panel_vote_summary` | User-controlled reusable templates for common HITL decision shapes. Invoke via slash command in the MCP host. |
+
+### What's not in v1.0
+
+The v1.0 line ships the foundational refactor only. The following land in subsequent releases:
+
+- **v1.1** — MCP elicitation (form / URL modes per CC v2.1.76+), timeout-then-poll state machine, configurable wait-time settings.
+- **v1.2** — auq-mcp-server feature parity (native OS notifications, question rejection, agent-skills support), A2A v1.0 endpoint + AgentCard, phraseturner content-quality integration.
+
+See `docs/ROADMAP.md` and `CHANGELOG.md` for the full migration guide.

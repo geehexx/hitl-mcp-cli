@@ -8,52 +8,40 @@ HITL MCP CLI is built as a layered architecture that separates concerns between 
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        AI Agent / MCP Client                 │
-│                    (Claude, GPT, Custom Agent)               │
+│                        AI Agent / MCP Client                │
+│                    (Claude, GPT, Custom Agent)              │
 └────────────────────────────┬────────────────────────────────┘
                              │ HTTP (Streamable-HTTP Transport)
                              │ MCP Protocol (JSON-RPC)
 ┌────────────────────────────▼────────────────────────────────┐
-│                      FastMCP Server Layer                    │
+│                      FastMCP Server Layer                   │
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │  Tool Registry & Schema Generation                   │   │
-│  │  - request_text_input                                │   │
-│  │  - request_selection                                 │   │
-│  │  - request_confirmation                              │   │
-│  │  - request_path_input                                │   │
-│  │  - notify_completion                                 │   │
+│  │  - hitl_collect / hitl_ask                           │   │
+│  │  - hitl_choose                                       │   │
+│  │  - hitl_confirm                                      │   │
+│  │  - hitl_notify                                       │   │
 │  └──────────────────────────────────────────────────────┘   │
 └────────────────────────────┬────────────────────────────────┘
-                             │ Async Function Calls
+                             │ Async Queue (HITLQueue)
 ┌────────────────────────────▼────────────────────────────────┐
-│                        UI Layer                              │
+│                        TUI Layer (Textual)                  │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  Prompt Wrappers (prompts.py)                        │   │
-│  │  - prompt_text, prompt_select, prompt_checkbox       │   │
-│  │  - prompt_confirm, prompt_path                       │   │
-│  │  - display_notification                              │   │
+│  │  Screens (screens.py)                                │   │
+│  │  - CollectScreen, ChooseScreen, ConfirmScreen        │   │
+│  │  - NotifyScreen                                      │   │
 │  └──────────────────────────────────────────────────────┘   │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  Visual Feedback (feedback.py)                       │   │
-│  │  - loading_indicator, show_success, show_error       │   │
-│  └──────────────────────────────────────────────────────┘   │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  Banner Display (banner.py)                          │   │
-│  │  - Startup banner with gradient colors               │   │
+│  │  App (app.py)                                        │   │
+│  │  - Sessions panel (color-coded by recency)           │   │
+│  │  - Queue panel (full history, clickable rows)        │   │
+│  │  - Collapsible messages (>200 chars)                 │   │
 │  └──────────────────────────────────────────────────────┘   │
 └────────────────────────────┬────────────────────────────────┘
                              │ Terminal I/O
 ┌────────────────────────────▼────────────────────────────────┐
-│                   Terminal Libraries                         │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │  InquirerPy  │  │     Rich     │  │   asyncio    │      │
-│  │  (Prompts)   │  │  (Styling)   │  │  (Async I/O) │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-└────────────────────────────┬────────────────────────────────┘
-                             │
-┌────────────────────────────▼────────────────────────────────┐
-│                           User                               │
-│                    (Terminal Interface)                      │
+│                           User                              │
+│                    (Terminal Interface)                     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -63,7 +51,7 @@ HITL MCP CLI is built as a layered architecture that separates concerns between 
 **Purpose**: MCP protocol implementation and tool registration
 
 - Defines FastMCP server instance
-- Registers 5 interactive tools with schemas
+- Registers 5 interactive tools (`hitl_collect`, `hitl_ask`, `hitl_choose`, `hitl_confirm`, `hitl_notify`) with schemas
 - Handles tool invocation and error wrapping
 - Provides comprehensive tool documentation
 
@@ -77,55 +65,31 @@ HITL MCP CLI is built as a layered architecture that separates concerns between 
 **Purpose**: Command-line interface and server startup
 
 - Argument parsing (host, port, banner options)
-- Banner display coordination
+- TUI app launch
 - Server lifecycle management
 - Graceful shutdown handling
 
 **Key Responsibilities**:
 - CLI argument parsing
-- Custom banner display
 - FastMCP server initialization
 - Signal handling (Ctrl+C)
 
-### `hitl_mcp_cli/ui/prompts.py`
-**Purpose**: Terminal prompt wrappers
+### `hitl_mcp_cli/tui/app.py`
+**Purpose**: Textual TUI application
 
-- Wraps InquirerPy for consistent UX
-- Adds icons and styling
-- Implements validation logic
-- Converts sync prompts to async
+- Split-pane layout: activity log + queue panel
+- Sessions panel (toggle with ctrl+b / f3), color-coded by recency
+- Queue panel with full history and clickable rows
+- Collapsible messages for long content (>200 chars)
+- Step indicators ("Step X/Y") when provided
 
-**Key Responsibilities**:
-- Text input with regex validation
-- Single/multiple selection
-- Yes/no confirmation
-- Path input with existence validation
-- Notification display
+### `hitl_mcp_cli/tui/screens.py`
+**Purpose**: Textual screens for each tool type
 
-### `hitl_mcp_cli/ui/feedback.py`
-**Purpose**: Visual feedback components
-
-- Loading indicators for async operations
-- Status messages (success, error, info, warning)
-- Consistent styling across feedback types
-
-**Key Responsibilities**:
-- Spinner animations
-- Status message formatting
-- Color-coded feedback
-
-### `hitl_mcp_cli/ui/banner.py`
-**Purpose**: Startup banner display
-
-- ASCII art logo
-- Gradient color effects
-- Fade-in animation
-- Server information display
-
-**Key Responsibilities**:
-- Banner generation
-- Animation control
-- Server info formatting
+- `CollectScreen`: text/path/multiline input with validation
+- `ChooseScreen`: single/multiple selection
+- `ConfirmScreen`: yes/no with severity levels
+- `NotifyScreen`: non-blocking notifications
 
 ## Data Flow
 
@@ -134,10 +98,10 @@ HITL MCP CLI is built as a layered architecture that separates concerns between 
 1. **AI Agent** sends MCP tool call via HTTP
 2. **FastMCP** deserializes request and validates parameters
 3. **Server** routes to appropriate tool function
-4. **Tool Function** calls UI layer (e.g., `prompt_text`)
-5. **UI Layer** displays prompt to user via InquirerPy
-6. **User** provides input in terminal
-7. **UI Layer** validates and returns result
+4. **Tool Function** enqueues request to HITLQueue
+5. **TUI App** dequeues and displays the appropriate screen
+6. **User** provides input in the TUI
+7. **TUI Screen** validates and resolves the future
 8. **Tool Function** returns result to FastMCP
 9. **FastMCP** serializes response
 10. **AI Agent** receives result and continues
@@ -156,49 +120,28 @@ Tool Function
 ## Design Patterns
 
 ### Async-First Design
-All public APIs are async, even when wrapping synchronous libraries:
+All public APIs are async. Tool functions enqueue requests and await futures resolved by the TUI:
 
 ```python
-@sync_to_async
-def prompt_text(...) -> str:
-    # Synchronous InquirerPy code
-    return inquirer.text(...).execute()
+async def hitl_collect(...) -> str:
+    future: asyncio.Future[str] = asyncio.get_event_loop().create_future()
+    await queue.put(CollectRequest(future=future, ...))
+    return await future
 ```
 
-### Decorator Pattern
-`@sync_to_async` converts blocking I/O to async:
-
-```python
-def sync_to_async(func):
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        return await asyncio.get_event_loop().run_in_executor(
-            None, lambda: func(*args, **kwargs)
-        )
-    return wrapper
-```
+### Queue-Based Serialization
+HITLQueue (asyncio.PriorityQueue) serializes concurrent tool calls — only one screen is shown at a time.
 
 ### Separation of Concerns
 - **Server**: Protocol and business logic
-- **UI**: User interaction and presentation
+- **TUI**: User interaction and presentation
 - **CLI**: Application lifecycle
-
-### Dependency Injection
-UI layer is independent and testable:
-
-```python
-# Server imports UI functions
-from .ui import prompt_text, display_notification
-
-# UI doesn't know about server
-```
 
 ## Technology Stack
 
 - **FastMCP**: MCP protocol implementation
-- **InquirerPy**: Interactive terminal prompts
-- **Rich**: Terminal styling and formatting
-- **asyncio**: Asynchronous I/O
+- **Textual**: Full-featured TUI framework (screens, widgets, key bindings)
+- **asyncio**: Asynchronous I/O and queue management
 
 ## Extension Points
 
@@ -208,27 +151,14 @@ from .ui import prompt_text, display_notification
 ```python
 @mcp.tool()
 async def new_tool(param: str) -> str:
-    result = await ui_function(param)
-    return result
+    future = asyncio.get_event_loop().create_future()
+    await queue.put(NewToolRequest(future=future, param=param))
+    return await future
 ```
 
-2. Add UI function in `ui/prompts.py`:
-```python
-@sync_to_async
-def ui_function(param: str) -> str:
-    # Implementation
-    return result
-```
+2. Add a Textual screen in `tui/screens.py`
 
 3. Add tests in `tests/test_server.py`
-
-### Customizing UI
-
-Modify `ui/prompts.py` to change:
-- Icons (ICONS dictionary)
-- Colors (style parameters)
-- Validation logic
-- Prompt formatting
 
 ### Adding Transports
 
@@ -241,3 +171,54 @@ Change in `cli.py`:
 ```python
 mcp.run(transport="stdio", ...)
 ```
+
+
+## v1.0 — MCP three-primitive idiom
+
+As of v1.0.0rc1, the FastMCP instance is fed by three disjoint packages mirroring the MCP spec primitives:
+
+```
+hitl_mcp_cli/
+├── _server_core.py     # FastMCP instance + TUI wiring (private; not public API)
+├── server.py           # Re-exports for back-compat — thin entry-point
+├── tools/              # Model-controlled actions (block on user, side-effects)
+│   ├── _collect.py     # hitl_collect, hitl_ask, hitl_choose
+│   ├── _confirm.py     # hitl_confirm
+│   └── _notify.py      # hitl_notify
+├── resources/          # Application-controlled read-only data (polled by client)
+│   ├── _pending.py     # queue://pending
+│   ├── _history.py     # queue://history
+│   ├── _session_activity.py     # session://activity
+│   └── _last_action_age.py      # session://last-user-action-age
+├── prompts/            # User-controlled reusable templates
+│   ├── _arch_fork.py        # hitl_architectural_fork
+│   ├── _destructive.py      # hitl_destructive_action
+│   ├── _scope_clarify.py    # hitl_scope_clarification
+│   └── _panel_vote.py       # hitl_panel_vote_summary
+└── tui/                # Textual TUI layer (unchanged)
+    ├── app.py
+    ├── queue.py
+    └── screens.py
+```
+
+### Primitive cheat-sheet
+
+| Primitive | Who controls | When to use | Example |
+|-----------|--------------|-------------|---------|
+| **Tool**     | Model (agent) | Take an action with side effects (block on user, write log, dispatch UI) | `hitl_confirm` |
+| **Resource** | Application (host) | Read-only state the agent / host can poll for context | `queue://pending` |
+| **Prompt**   | User | Reusable template the user invokes via slash command | `/hitl_architectural_fork` |
+
+### Why split now
+
+- **Discoverability**: each package's `__init__.py` documents what's registered there. New contributors don't grep the 450-line `server.py`.
+- **Testability**: each primitive is one short module; mocking is at the package boundary, not the FastMCP boundary.
+- **Forward-compat**: v1.1 adds elicitation surfaces; v1.2 adds an A2A endpoint. Both land as new packages alongside `tools/` / `resources/` / `prompts/` without touching the existing public API.
+
+### Resource polling vs subscription
+
+CC has closed MCP resource subscriptions as `not_planned`
+(anthropics/claude-code#7252). Resources in this server therefore return a
+fresh JSON snapshot on every fetch — clients should poll at a cadence matching
+their refresh tolerance (recommended: 1-5s for `queue://pending`, 10s+ for
+`session://*`).

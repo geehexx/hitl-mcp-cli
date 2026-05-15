@@ -1,138 +1,123 @@
 """Tests for error handling across the application."""
 
-from unittest.mock import AsyncMock, patch
+from __future__ import annotations
+
+import asyncio
 
 import pytest
 from fastmcp import Client
 
-from hitl_mcp_cli.server import mcp
+from hitl_mcp_cli.server import configure_tui_mode, mcp
+from hitl_mcp_cli.tui.queue import HITLQueue
 
 
 @pytest.fixture
-async def mcp_client() -> Client:
-    """Create MCP client for testing."""
+async def tui_queue() -> HITLQueue:
+    queue = HITLQueue()
+    configure_tui_mode(queue, None)  # type: ignore[arg-type]
+    yield queue
+    configure_tui_mode(None, None)  # type: ignore[arg-type]
+
+
+@pytest.fixture
+async def mcp_client(tui_queue: HITLQueue) -> Client:
     async with Client(mcp) as client:
         yield client
 
 
 @pytest.mark.asyncio
-async def test_request_text_input_keyboard_interrupt(mcp_client: Client) -> None:
-    """Test text input handles Ctrl+C gracefully."""
-    with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock:
-        mock.side_effect = KeyboardInterrupt()
+async def test_hitl_collect_cancel_from_queue(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Test hitl_collect returns cancel dict when queue resolves with cancel."""
 
-        with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("request_text_input", {"prompt": "Test:"})
+    async def _resolve() -> None:
+        req = await tui_queue.get()
+        tui_queue.resolve(req, {"action": "cancel"})
 
-        assert "User cancelled" in str(exc_info.value)
-
-
-@pytest.mark.asyncio
-async def test_request_text_input_generic_error(mcp_client: Client) -> None:
-    """Test text input handles generic errors."""
-    with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock:
-        mock.side_effect = ValueError("Invalid input")
-
-        with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("request_text_input", {"prompt": "Test:"})
-
-        assert "Input collection failed" in str(exc_info.value)
+    task = asyncio.create_task(_resolve())
+    result = await mcp_client.call_tool("hitl_collect", {"message": "Test:"})
+    await task
+    assert result is not None
+    assert result.data == {"action": "cancel"}
 
 
 @pytest.mark.asyncio
-async def test_request_selection_keyboard_interrupt(mcp_client: Client) -> None:
-    """Test selection handles Ctrl+C gracefully."""
-    with patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock:
-        mock.side_effect = KeyboardInterrupt()
+async def test_hitl_choose_cancel_from_queue(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Test hitl_choose returns cancel dict when queue resolves with cancel."""
 
-        with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("request_selection", {"prompt": "Choose:", "choices": ["A", "B"]})
+    async def _resolve() -> None:
+        req = await tui_queue.get()
+        tui_queue.resolve(req, {"action": "cancel"})
 
-        assert "User cancelled" in str(exc_info.value)
-
-
-@pytest.mark.asyncio
-async def test_request_selection_generic_error(mcp_client: Client) -> None:
-    """Test selection handles generic errors."""
-    with patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock:
-        mock.side_effect = RuntimeError("Selection failed")
-
-        with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("request_selection", {"prompt": "Choose:", "choices": ["A", "B"]})
-
-        assert "Selection failed" in str(exc_info.value)
+    task = asyncio.create_task(_resolve())
+    result = await mcp_client.call_tool("hitl_choose", {"message": "Choose:", "choices": ["A", "B"]})
+    await task
+    assert result is not None
+    assert result.data == {"action": "cancel"}
 
 
 @pytest.mark.asyncio
-async def test_request_confirmation_keyboard_interrupt(mcp_client: Client) -> None:
-    """Test confirmation handles Ctrl+C gracefully."""
-    with patch("hitl_mcp_cli.server.prompt_confirm", new_callable=AsyncMock) as mock:
-        mock.side_effect = KeyboardInterrupt()
+async def test_hitl_confirm_cancel_from_queue(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Test hitl_confirm returns cancel dict when queue resolves with cancel."""
 
-        with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("request_confirmation", {"prompt": "Proceed?"})
+    async def _resolve() -> None:
+        req = await tui_queue.get()
+        tui_queue.resolve(req, {"action": "cancel"})
 
-        assert "User cancelled" in str(exc_info.value)
-
-
-@pytest.mark.asyncio
-async def test_request_confirmation_generic_error(mcp_client: Client) -> None:
-    """Test confirmation handles generic errors."""
-    with patch("hitl_mcp_cli.server.prompt_confirm", new_callable=AsyncMock) as mock:
-        mock.side_effect = OSError("Terminal error")
-
-        with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("request_confirmation", {"prompt": "Proceed?"})
-
-        assert "Confirmation failed" in str(exc_info.value)
+    task = asyncio.create_task(_resolve())
+    result = await mcp_client.call_tool("hitl_confirm", {"message": "Proceed?"})
+    await task
+    assert result is not None
+    assert result.data == {"action": "cancel", "timed_out": False}
 
 
 @pytest.mark.asyncio
-async def test_request_path_input_keyboard_interrupt(mcp_client: Client) -> None:
-    """Test path input handles Ctrl+C gracefully."""
-    with patch("hitl_mcp_cli.server.prompt_path", new_callable=AsyncMock) as mock:
-        mock.side_effect = KeyboardInterrupt()
-
-        with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("request_path_input", {"prompt": "Select path:"})
-
-        assert "User cancelled" in str(exc_info.value)
+async def test_hitl_notify_acknowledged(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Test hitl_notify always returns acknowledged."""
+    result = await mcp_client.call_tool("hitl_notify", {"message": "Message"})
+    assert result is not None
+    assert result.data == {"acknowledged": True}
 
 
 @pytest.mark.asyncio
-async def test_request_path_input_generic_error(mcp_client: Client) -> None:
-    """Test path input handles generic errors."""
-    with patch("hitl_mcp_cli.server.prompt_path", new_callable=AsyncMock) as mock:
-        mock.side_effect = PermissionError("Access denied")
+async def test_hitl_choose_multiple_cancel(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Test multiple selection cancel from queue."""
 
-        with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("request_path_input", {"prompt": "Select path:"})
+    async def _resolve() -> None:
+        req = await tui_queue.get()
+        tui_queue.resolve(req, {"action": "cancel"})
 
-        assert "Path input failed" in str(exc_info.value)
-
-
-@pytest.mark.asyncio
-async def test_notify_completion_error(mcp_client: Client) -> None:
-    """Test notification handles errors."""
-    with patch("hitl_mcp_cli.server.display_notification") as mock:
-        mock.side_effect = RuntimeError("Display error")
-
-        with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool("notify_completion", {"title": "Test", "message": "Message"})
-
-        assert "Notification display failed" in str(exc_info.value)
+    task = asyncio.create_task(_resolve())
+    result = await mcp_client.call_tool(
+        "hitl_choose",
+        {"message": "Select:", "choices": ["A", "B"], "multiple": True},
+    )
+    await task
+    assert result is not None
+    assert result.data == {"action": "cancel"}
 
 
 @pytest.mark.asyncio
-async def test_multiple_selection_keyboard_interrupt(mcp_client: Client) -> None:
-    """Test multiple selection handles Ctrl+C gracefully."""
-    with patch("hitl_mcp_cli.server.prompt_checkbox", new_callable=AsyncMock) as mock:
-        mock.side_effect = KeyboardInterrupt()
+async def test_hitl_collect_required_empty(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Test required=True with empty input returns cancel."""
 
-        with pytest.raises(Exception) as exc_info:
-            await mcp_client.call_tool(
-                "request_selection",
-                {"prompt": "Select:", "choices": ["A", "B"], "allow_multiple": True},
-            )
+    async def _resolve() -> None:
+        req = await tui_queue.get()
+        tui_queue.resolve(req, "")
 
-        assert "User cancelled" in str(exc_info.value)
+    task = asyncio.create_task(_resolve())
+    result = await mcp_client.call_tool("hitl_collect", {"message": "Name:", "required": True})
+    await task
+    assert result is not None
+    assert isinstance(result.data, dict)
+    assert result.data.get("action") == "cancel"
+
+
+@pytest.mark.asyncio
+async def test_hitl_confirm_timeout(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Test hitl_confirm returns timed_out when timeout expires."""
+    result = await mcp_client.call_tool(
+        "hitl_confirm",
+        {"message": "Deploy?", "timeout_seconds": 1},
+    )
+    assert result is not None
+    assert result.data == {"action": "decline", "timed_out": True}

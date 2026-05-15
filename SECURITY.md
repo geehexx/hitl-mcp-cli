@@ -45,9 +45,9 @@ Please include the following information:
 - Monitor for unusual activity
 
 ### Dependency Security
-- Keep dependencies updated (use dependabot)
+- Keep dependencies updated (`uv lock --upgrade`)
 - Review dependency changes before updating
-- Use `pip-audit` or similar tools to scan for vulnerabilities
+- Use `uv pip audit` or `pip-audit` to scan for vulnerabilities
 
 ## Security Scanning
 

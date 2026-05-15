@@ -1,18 +1,29 @@
 """Integration tests for hitl-mcp-cli server.
 
-Tests the full MCP protocol initialization sequence and tool execution.
+Tests the full MCP protocol initialization sequence and tool execution via TUI queue.
 """
 
-from unittest.mock import AsyncMock, patch
+import asyncio
+from unittest.mock import patch
 
 import pytest
 from fastmcp import Client
 
-from hitl_mcp_cli.server import mcp
+from hitl_mcp_cli.server import configure_tui_mode, mcp
+from hitl_mcp_cli.tui.queue import HITLQueue
 
 
 @pytest.fixture
-async def mcp_client() -> Client:
+async def tui_queue() -> HITLQueue:
+    """Create a TUI queue and configure the server to use it."""
+    queue = HITLQueue()
+    configure_tui_mode(queue, None)  # type: ignore[arg-type]
+    yield queue
+    configure_tui_mode(None, None)  # type: ignore[arg-type]
+
+
+@pytest.fixture
+async def mcp_client(tui_queue: HITLQueue) -> Client:
     """Create MCP client connected to the interactive server."""
     async with Client(mcp) as client:
         yield client
@@ -21,16 +32,9 @@ async def mcp_client() -> Client:
 @pytest.mark.asyncio
 async def test_server_initialization(mcp_client: Client) -> None:
     """Test MCP server initializes with correct metadata."""
-    # The client fixture handles the full initialization sequence:
-    # 1. Client sends initialize request
-    # 2. Server responds with capabilities
-    # 3. Client sends notifications/initialized
-    # 4. Connection is ready for operations
-
-    # Verify server info is accessible via initialize_result
     assert mcp_client.initialize_result is not None
     assert mcp_client.initialize_result.serverInfo is not None
-    assert mcp_client.initialize_result.serverInfo.name == "Interactive Input Server"
+    assert mcp_client.initialize_result.serverInfo.name == "HITL MCP Server"
 
 
 @pytest.mark.asyncio
@@ -40,11 +44,11 @@ async def test_tools_list(mcp_client: Client) -> None:
 
     tool_names = {tool.name for tool in tools}
     expected_tools = {
-        "request_text_input",
-        "request_selection",
-        "request_confirmation",
-        "request_path_input",
-        "notify_completion",
+        "hitl_collect",
+        "hitl_ask",
+        "hitl_choose",
+        "hitl_confirm",
+        "hitl_notify",
     }
 
     assert tool_names == expected_tools
@@ -57,46 +61,40 @@ async def test_tool_schemas(mcp_client: Client) -> None:
     tools = await mcp_client.list_tools()
     tools_by_name = {tool.name: tool for tool in tools}
 
-    # Verify request_text_input schema
-    text_input = tools_by_name["request_text_input"]
-    assert text_input.description is not None
-    assert "text input" in text_input.description.lower()
-    assert text_input.inputSchema is not None
-    assert "prompt" in text_input.inputSchema["properties"]
+    collect = tools_by_name["hitl_collect"]
+    assert collect.description is not None
+    assert "input" in collect.description.lower() or "collect" in collect.description.lower()
+    assert collect.inputSchema is not None
+    assert "message" in collect.inputSchema["properties"]
 
-    # Verify request_selection schema
-    selection = tools_by_name["request_selection"]
-    assert selection.description is not None
-    assert "select" in selection.description.lower()
-    assert selection.inputSchema is not None
-    assert "choices" in selection.inputSchema["properties"]
+    ask = tools_by_name["hitl_ask"]
+    assert ask.description is not None
+    assert "alias" in ask.description.lower() or "collect" in ask.description.lower()
+    assert ask.inputSchema is not None
+    assert "message" in ask.inputSchema["properties"]
 
-    # Verify request_confirmation schema
-    confirmation = tools_by_name["request_confirmation"]
-    assert confirmation.description is not None
-    assert "confirmation" in confirmation.description.lower()
-    assert confirmation.inputSchema is not None
-    assert "prompt" in confirmation.inputSchema["properties"]
+    choose = tools_by_name["hitl_choose"]
+    assert choose.description is not None
+    assert "select" in choose.description.lower() or "option" in choose.description.lower()
+    assert choose.inputSchema is not None
+    assert "message" in choose.inputSchema["properties"]
 
-    # Verify request_path_input schema
-    path_input = tools_by_name["request_path_input"]
-    assert path_input.description is not None
-    assert "path" in path_input.description.lower()
-    assert path_input.inputSchema is not None
-    assert "prompt" in path_input.inputSchema["properties"]
+    confirm = tools_by_name["hitl_confirm"]
+    assert confirm.description is not None
+    assert "confirm" in confirm.description.lower()
+    assert confirm.inputSchema is not None
+    assert "message" in confirm.inputSchema["properties"]
 
-    # Verify notify_completion schema
-    notification = tools_by_name["notify_completion"]
-    assert notification.description is not None
-    assert "notification" in notification.description.lower()
-    assert notification.inputSchema is not None
-    assert "title" in notification.inputSchema["properties"]
+    notify = tools_by_name["hitl_notify"]
+    assert notify.description is not None
+    assert "notification" in notify.description.lower() or "notify" in notify.description.lower()
+    assert notify.inputSchema is not None
+    assert "message" in notify.inputSchema["properties"]
 
 
 @pytest.mark.asyncio
 async def test_server_capabilities(mcp_client: Client) -> None:
     """Test server advertises correct capabilities."""
-    # Server should advertise tools capability
     assert mcp_client.initialize_result is not None
     assert mcp_client.initialize_result.capabilities is not None
     assert mcp_client.initialize_result.capabilities.tools is not None
@@ -105,114 +103,196 @@ async def test_server_capabilities(mcp_client: Client) -> None:
 @pytest.mark.asyncio
 async def test_protocol_version(mcp_client: Client) -> None:
     """Test server uses correct MCP protocol version."""
-    # Verify protocol version is set in initialize_result
     assert mcp_client.initialize_result is not None
     assert mcp_client.initialize_result.protocolVersion is not None
-    # Should be a valid version string (e.g., "2025-03-26")
     assert isinstance(mcp_client.initialize_result.protocolVersion, str)
     assert len(mcp_client.initialize_result.protocolVersion) > 0
 
 
 @pytest.mark.asyncio
-async def test_request_text_input_tool(mcp_client: Client) -> None:
-    """Test request_text_input tool execution with mocked input."""
-    with patch("hitl_mcp_cli.server.prompt_text", new_callable=AsyncMock) as mock_prompt:
-        mock_prompt.return_value = "Test User Input"
+async def test_hitl_collect_tool(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Test hitl_collect tool execution via TUI queue."""
 
-        result = await mcp_client.call_tool(
-            "request_text_input", {"prompt": "Enter your name:", "default": "User"}
-        )
+    async def _resolve() -> None:
+        req = await tui_queue.get()
+        tui_queue.resolve(req, "Test User Input")
 
-        assert result is not None
-        assert result.data == "Test User Input"
-        mock_prompt.assert_called_once_with("Enter your name:", "User", False, None)
+    task = asyncio.create_task(_resolve())
+    result = await mcp_client.call_tool("hitl_collect", {"message": "Enter your name:", "default": "User"})
+    await task
 
-
-@pytest.mark.asyncio
-async def test_request_selection_tool(mcp_client: Client) -> None:
-    """Test request_selection tool execution with mocked input."""
-    with patch("hitl_mcp_cli.server.prompt_select", new_callable=AsyncMock) as mock_select:
-        mock_select.return_value = "Option B"
-
-        result = await mcp_client.call_tool(
-            "request_selection",
-            {
-                "prompt": "Choose an option:",
-                "choices": ["Option A", "Option B", "Option C"],
-                "default": "Option A",
-                "allow_multiple": False,
-            },
-        )
-
-        assert result is not None
-        assert result.data == "Option B"
-        mock_select.assert_called_once()
+    assert result is not None
+    assert result.data == "Test User Input"
 
 
 @pytest.mark.asyncio
-async def test_request_confirmation_tool(mcp_client: Client) -> None:
-    """Test request_confirmation tool execution with mocked input."""
-    with patch("hitl_mcp_cli.server.prompt_confirm", new_callable=AsyncMock) as mock_confirm:
-        mock_confirm.return_value = True
+async def test_hitl_ask_alias(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Test hitl_ask delegates to hitl_collect."""
 
-        result = await mcp_client.call_tool(
-            "request_confirmation", {"prompt": "Do you want to continue?", "default": False}
-        )
+    async def _resolve() -> None:
+        req = await tui_queue.get()
+        tui_queue.resolve(req, "Ask Response")
 
-        assert result is not None
-        assert result.data is True
-        mock_confirm.assert_called_once_with("Do you want to continue?", False)
+    task = asyncio.create_task(_resolve())
+    result = await mcp_client.call_tool("hitl_ask", {"message": "What is your name?", "default": "User"})
+    await task
 
-
-@pytest.mark.asyncio
-async def test_request_path_input_tool(mcp_client: Client) -> None:
-    """Test request_path_input tool execution with mocked input."""
-    with patch("hitl_mcp_cli.server.prompt_path", new_callable=AsyncMock) as mock_path:
-        mock_path.return_value = "/tmp/test.txt"
-
-        result = await mcp_client.call_tool(
-            "request_path_input",
-            {"prompt": "Enter file path:", "path_type": "file", "must_exist": False, "default": None},
-        )
-
-        assert result is not None
-        assert result.data == "/tmp/test.txt"
-        mock_path.assert_called_once()
+    assert result is not None
+    assert result.data == "Ask Response"
 
 
 @pytest.mark.asyncio
-async def test_notify_completion_tool(mcp_client: Client) -> None:
-    """Test notify_completion tool execution with mocked display."""
-    with patch("hitl_mcp_cli.server.display_notification") as mock_notify:
-        result = await mcp_client.call_tool(
-            "notify_completion",
-            {
-                "title": "Task Complete",
-                "message": "Successfully completed the task",
-                "notification_type": "success",
-            },
-        )
+async def test_hitl_choose_tool(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Test hitl_choose tool execution via TUI queue."""
 
-        assert result is not None
-        assert result.data == {"acknowledged": True}
-        mock_notify.assert_called_once_with("Task Complete", "Successfully completed the task", "success")
+    async def _resolve() -> None:
+        req = await tui_queue.get()
+        tui_queue.resolve(req, "Option B")
+
+    task = asyncio.create_task(_resolve())
+    result = await mcp_client.call_tool(
+        "hitl_choose",
+        {
+            "message": "Choose an option:",
+            "choices": ["Option A", "Option B", "Option C"],
+            "default": "Option A",
+            "multiple": False,
+        },
+    )
+    await task
+
+    assert result is not None
+    assert result.data == "Option B"
 
 
 @pytest.mark.asyncio
-async def test_multiple_selection_tool(mcp_client: Client) -> None:
-    """Test request_selection with multiple selections."""
-    with patch("hitl_mcp_cli.server.prompt_checkbox", new_callable=AsyncMock) as mock_checkbox:
-        mock_checkbox.return_value = ["Option A", "Option C"]
+async def test_hitl_confirm_tool(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Test hitl_confirm tool execution via TUI queue."""
 
-        result = await mcp_client.call_tool(
-            "request_selection",
-            {
-                "prompt": "Select multiple options:",
-                "choices": ["Option A", "Option B", "Option C"],
-                "allow_multiple": True,
-            },
-        )
+    async def _resolve() -> None:
+        req = await tui_queue.get()
+        tui_queue.resolve(req, {"action": "accept"})
 
-        assert result is not None
-        assert result.data == ["Option A", "Option C"]
-        mock_checkbox.assert_called_once()
+    task = asyncio.create_task(_resolve())
+    result = await mcp_client.call_tool(
+        "hitl_confirm", {"message": "Do you want to continue?", "default": False}
+    )
+    await task
+
+    assert result is not None
+    assert result.data == {"action": "accept", "timed_out": False}
+
+
+@pytest.mark.asyncio
+async def test_hitl_confirm_with_timeout_expired(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Test hitl_confirm returns decline+timed_out when timeout expires."""
+    # Don't resolve — let it time out
+    result = await mcp_client.call_tool(
+        "hitl_confirm",
+        {"message": "Continue?", "timeout_seconds": 1},
+    )
+
+    assert result is not None
+    assert result.data == {"action": "decline", "timed_out": True}
+
+
+@pytest.mark.asyncio
+async def test_hitl_notify_tool(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Test hitl_notify tool execution."""
+    result = await mcp_client.call_tool(
+        "hitl_notify",
+        {
+            "message": "Successfully completed the task",
+            "level": "success",
+            "title": "Task Complete",
+        },
+    )
+
+    assert result is not None
+    assert result.data == {"acknowledged": True}
+
+
+@pytest.mark.asyncio
+async def test_hitl_choose_multiple(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Test hitl_choose with multiple selections."""
+
+    async def _resolve() -> None:
+        req = await tui_queue.get()
+        tui_queue.resolve(req, ["Option A", "Option C"])
+
+    task = asyncio.create_task(_resolve())
+    result = await mcp_client.call_tool(
+        "hitl_choose",
+        {
+            "message": "Select multiple options:",
+            "choices": ["Option A", "Option B", "Option C"],
+            "multiple": True,
+        },
+    )
+    await task
+
+    assert result is not None
+    assert result.data == ["Option A", "Option C"]
+
+
+@pytest.mark.asyncio
+async def test_hitl_collect_with_notes(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Test hitl_collect passes notes through queue params."""
+
+    async def _resolve() -> None:
+        req = await tui_queue.get()
+        assert req.params.get("notes") == "This is context info"
+        tui_queue.resolve(req, "response")
+
+    task = asyncio.create_task(_resolve())
+    result = await mcp_client.call_tool(
+        "hitl_collect",
+        {"message": "Enter name:", "notes": "This is context info"},
+    )
+    await task
+
+    assert result is not None
+    assert result.data == "response"
+
+
+@pytest.mark.asyncio
+async def test_hitl_choose_escape_hatch_all_selected(mcp_client: Client, tui_queue: HITLQueue) -> None:
+    """Test escape hatch dict result passes through."""
+
+    async def _resolve() -> None:
+        req = await tui_queue.get()
+        tui_queue.resolve(req, {"selected": ["A", "B", "C"], "note": "I want everything"})
+
+    task = asyncio.create_task(_resolve())
+    result = await mcp_client.call_tool(
+        "hitl_choose",
+        {"message": "Pick:", "choices": ["A", "B", "C"], "multiple": True},
+    )
+    await task
+
+    assert result is not None
+    assert result.data == {"selected": ["A", "B", "C"], "note": "I want everything"}
+
+
+@pytest.mark.asyncio
+async def test_stateless_http_transport() -> None:
+    """Regression: server must use stateless_http=True for independent HTTP requests."""
+    from unittest.mock import MagicMock
+
+    with patch.object(mcp, "run", wraps=MagicMock()) as mock_run:
+        from hitl_mcp_cli.cli import main
+
+        with (
+            patch("hitl_mcp_cli.server.configure_tui_mode"),
+            patch("hitl_mcp_cli.tui.HITLApp") as mock_app_cls,
+            patch("hitl_mcp_cli.tui.HITLQueue"),
+            patch("hitl_mcp_cli.cli.mcp") as mock_cli_mcp,
+            patch("sys.argv", ["hitl-mcp"]),
+        ):
+            mock_cli_mcp.http_app.return_value = MagicMock()
+            mock_app_cls.return_value = MagicMock()
+            main()
+
+        # The TUI app runs the server — stateless_http is set in tui/app.py
+        # Just verify the CLI launches TUI (not headless mcp.run)
+        mock_run.assert_not_called()

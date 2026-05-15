@@ -1,6 +1,6 @@
 [project]
 name = "hitl-mcp-cli"
-version = "0.4.0"
+version = "1.0.0rc1"
 description = "Human-in-the-loop MCP server for interactive AI agent workflows"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -17,28 +17,39 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
 dependencies = [
     "fastmcp>=2.13.0",
-    "inquirerpy>=0.3.4",
     "rich>=13.0.0",
+    "textual>=0.89.0",
 ]
 
 [project.optional-dependencies]
+test = [
+    "hypothesis>=6.0",
+    "schemathesis>=3.0",
+    "tox>=4.0",
+]
+tmux = [
+    "libtmux>=0.37,<1.0",
+]
 dev = [
     "pytest>=8.4",
     "pytest-asyncio>=1.2",
     "pytest-cov>=7.0",
+    "pytest-textual-snapshot>=0.5.0",
     "mypy>=1.18",
-    "black>=25.9",
-    "isort>=7.0",
     "ruff>=0.14",
     "pre-commit>=3.5",
     "bandit[toml]>=1.7",
     "interrogate>=1.7",
+    "poethepoet>=0.34.0",
+    "textual>=0.89.0",
+    "libtmux>=0.37,<1.0",
 ]
 
 [project.scripts]
@@ -56,14 +67,6 @@ build-backend = "hatchling.build"
 [tool.hatchling.build.targets.wheel]
 packages = ["hitl_mcp_cli"]
 
-[tool.black]
-line-length = 110
-target-version = ["py311"]
-
-[tool.isort]
-profile = "black"
-line_length = 110
-
 [tool.ruff]
 line-length = 110
 target-version = "py311"
@@ -77,9 +80,10 @@ select = [
     "B",   # flake8-bugbear
     "C4",  # flake8-comprehensions
     "UP",  # pyupgrade
+    "RUF", # ruff-specific rules
 ]
 ignore = [
-    "E501",  # line too long (handled by black)
+    "E501",  # line too long (handled by ruff format)
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -91,16 +95,12 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 
-[[tool.mypy.overrides]]
-module = "InquirerPy.*"
-ignore_missing_imports = true
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "--strict-markers --cov=hitl_mcp_cli --cov-report=term-missing"
+addopts = "--strict-markers"
 asyncio_mode = "auto"
 
 [tool.bandit]
@@ -112,3 +112,24 @@ ignore-init-method = true
 ignore-init-module = true
 fail-under = 80
 verbose = 1
+
+[tool.poe.tasks]
+test = "pytest tests/ -v"
+test-cov = "pytest tests/ -v --cov=hitl_mcp_cli --cov-report=term-missing"
+lint = "ruff check . --fix"
+format = "ruff format ."
+type-check = "mypy hitl_mcp_cli/"
+security = "bandit -r hitl_mcp_cli/ -f json -o /tmp/hitl-bandit.json"
+pre-commit = "pre-commit run --all-files"
+
+[tool.poe.tasks.clean]
+shell = "rm -rf .pytest_cache .mypy_cache .ruff_cache htmlcov .coverage && find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true"
+
+[tool.poe.tasks.check]
+sequence = ["lint", "type-check", "test-cov"]
+ignore_fail = "return_non_zero"
+
+[dependency-groups]
+dev = [
+    "pytest-textual-snapshot>=1.1.0",
+]

@@ -1,0 +1,96 @@
+/* Three-pane HITL TUI layout */
+
+#main-pane {
+    height: 1fr;
+}
+
+#sessions-pane {
+    width: 1fr;
+    min-width: 22;
+    border-right: solid $panel-darken-1;
+}
+
+#activity-pane {
+    width: 2fr;
+    border-right: solid $panel-darken-1;
+}
+
+#queue-pane {
+    width: 1fr;
+    min-width: 24;
+}
+
+.pane-title {
+    height: 1;
+    background: $panel-darken-1;
+    padding: 0 1;
+    text-style: bold;
+    width: 100%;
+}
+
+#queue-title {
+    height: 1;
+    background: $panel-darken-1;
+    padding: 0 1;
+    text-style: bold;
+    width: 100%;
+}
+
+#output-log {
+    height: 1fr;
+}
+
+#sessions-table {
+    height: 1fr;
+}
+
+#queue-table {
+    height: 1fr;
+}
+
+#status-bar {
+    height: 1;
+    background: $panel-darken-2;
+    padding: 0 1;
+    dock: bottom;
+}
+
+.placeholder-text {
+    color: $text-muted;
+    text-style: dim italic;
+    padding: 1 1;
+}
+
+/* Collapsible widget styling */
+Collapsible {
+    margin: 0 0 1 0;
+    padding: 0;
+}
+
+/* Context panel */
+.context-panel {
+    background: $panel-darken-1;
+    padding: 1;
+    margin-bottom: 1;
+    border-left: thick $accent;
+    width: 1fr;
+}
+
+/* Step indicator */
+.step-indicator {
+    color: $text-muted;
+    text-style: dim;
+    width: 1fr;
+    margin-bottom: 1;
+}
+
+/* Message widgets */
+.msg-inline {
+    width: 1fr;
+    margin-bottom: 1;
+}
+
+.msg-collapsible {
+    width: 1fr;
+    margin-bottom: 1;
+}
