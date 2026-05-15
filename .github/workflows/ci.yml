@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-caching: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --extra dev --frozen
+
+      - name: Lint with ruff
+        run: uv run ruff check hitl_mcp_cli/ tests/
+
+      - name: Check formatting
+        run: uv run ruff format --check hitl_mcp_cli/ tests/
+
+      - name: Type check with mypy
+        run: uv run mypy hitl_mcp_cli/
+
+      - name: Run tests with coverage
+        run: uv run pytest --cov=hitl_mcp_cli --cov-report=xml --cov-fail-under=80 -q --timeout=30
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+        if: matrix.python-version == '3.12'
