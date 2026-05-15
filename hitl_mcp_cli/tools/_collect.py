@@ -3,10 +3,17 @@
 Both block until the user responds. ``hitl_ask`` is an alias for
 ``hitl_collect`` kept for back-compat — agents pick whichever name reads
 more naturally.
+
+Morning-batch protocol: when ``urgency`` is ``"soon"`` or ``"fyi"`` and the
+TUI queue is unavailable (user away), the question is appended to
+``~/.local/state/hitl-deferred-questions.jsonl`` and the call returns
+immediately with ``{"action": "deferred", "urgency": urgency}``.
+``urgency="blocking"`` always blocks regardless of TUI availability.
 """
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -15,10 +22,39 @@ from .._server_core import (
     Context,
     get_client_name,
     get_session_id,
+    get_tui_queue,
     tui_enqueue,
 )
 from .._server_core import mcp as _mcp
 from ..interaction_log import ResultType, log_interaction
+
+_DEFERRED_QUESTIONS_LOG = Path.home() / ".local" / "state" / "hitl-deferred-questions.jsonl"
+
+
+def _defer_question(
+    *,
+    message: str,
+    urgency: Literal["blocking", "soon", "fyi"],
+    notes: str | None,
+    context: str | None,
+    agent_name: str | None,
+    project_id: str | None,
+) -> dict[str, str]:
+    """Append a deferred question to the morning-batch JSONL and return a deferred sentinel."""
+    entry = {
+        "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "category": "hitl-collect",
+        "urgency": urgency,
+        "context": (context or message)[:200],
+        "proposed": None,
+        "source": agent_name or "unknown",
+        "project_id": project_id,
+        "notes": notes,
+    }
+    _DEFERRED_QUESTIONS_LOG.parent.mkdir(parents=True, exist_ok=True)
+    with _DEFERRED_QUESTIONS_LOG.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+    return {"action": "deferred", "urgency": urgency}
 
 
 async def _collect_impl(
@@ -38,9 +74,23 @@ async def _collect_impl(
     project_id: str | None,
     step: int | None,
     total_steps: int | None,
+    urgency: Literal["blocking", "soon", "fyi"],
     ctx: Context | None,
 ) -> str | dict[str, str]:
     """Shared implementation for ``hitl_collect`` and ``hitl_ask``."""
+    # Morning-batch: defer non-blocking questions when TUI is unavailable
+    if urgency in ("soon", "fyi") and get_tui_queue() is None:
+        result = _defer_question(
+            message=message,
+            urgency=urgency,
+            notes=notes,
+            context=context,
+            agent_name=agent_name,
+            project_id=project_id,
+        )
+        log_interaction(tool, 0, "cancel", message=message, result=str(result)[:80], notes=notes)
+        return result
+
     t0 = time.monotonic()
     client_name = get_client_name(ctx, agent_name)
     session_id = get_session_id(ctx)
@@ -64,23 +114,25 @@ async def _collect_impl(
         client_name=client_name,
         session_id=session_id,
     )
+    out: str | dict[str, str] = result
     if isinstance(result, str):
-        if strip_whitespace:
-            result = result.strip()
-        if required and not result:
-            result = {"action": "cancel", "reason": "required field was empty"}
-        elif input_type == "path" and isinstance(result, str) and result:
-            resolved = Path(result).expanduser().resolve()
+        s = result.strip() if strip_whitespace else result
+        if required and not s:
+            out = {"action": "cancel", "reason": "required field was empty"}
+        elif input_type == "path" and s:
+            resolved = Path(s).expanduser().resolve()
             if path_type == "file" and not resolved.is_file():
-                result = {"action": "cancel", "reason": f"not a file: {resolved}"}
+                out = {"action": "cancel", "reason": f"not a file: {resolved}"}
             elif path_type == "dir" and not resolved.is_dir():
-                result = {"action": "cancel", "reason": f"not a directory: {resolved}"}
+                out = {"action": "cancel", "reason": f"not a directory: {resolved}"}
             else:
-                result = str(resolved)
+                out = str(resolved)
+        else:
+            out = s
     ms = int((time.monotonic() - t0) * 1000)
-    rt: ResultType = "cancel" if isinstance(result, dict) else "value"
-    log_interaction(tool, ms, rt, message=message, result=str(result)[:80], notes=notes)
-    return cast("str | dict[str, str]", result)
+    rt: ResultType = "cancel" if isinstance(out, dict) else "value"
+    log_interaction(tool, ms, rt, message=message, result=str(out)[:80], notes=notes)
+    return out
 
 
 @_mcp.tool()
@@ -99,6 +151,7 @@ async def hitl_collect(
     project_id: str | None = None,
     step: int | None = None,
     total_steps: int | None = None,
+    urgency: Literal["blocking", "soon", "fyi"] = "blocking",
     ctx: Context | None = None,
 ) -> str | dict[str, str]:
     """Collect a single input value from the user. Blocks until the user responds.
@@ -118,9 +171,13 @@ async def hitl_collect(
         project_id: Project identifier; groups sessions in the TUI.
         step: Current step number when the agent is in a multi-step workflow.
         total_steps: Total steps in the workflow.
+        urgency: ``"blocking"`` always waits for user; ``"soon"``/``"fyi"`` defer to
+            morning-batch JSONL when TUI is unavailable (user away).
 
     Returns:
-        The user's input string, or ``{"action": "cancel", "reason": ...}`` when cancelled / validation failed.
+        The user's input string, ``{"action": "cancel", "reason": ...}`` when cancelled /
+        validation failed, or ``{"action": "deferred", "urgency": ...}`` when deferred to
+        morning-batch.
     """
     return await _collect_impl(
         "hitl_collect",
@@ -138,6 +195,7 @@ async def hitl_collect(
         project_id=project_id,
         step=step,
         total_steps=total_steps,
+        urgency=urgency,
         ctx=ctx,
     )
 
@@ -158,6 +216,7 @@ async def hitl_ask(
     project_id: str | None = None,
     step: int | None = None,
     total_steps: int | None = None,
+    urgency: Literal["blocking", "soon", "fyi"] = "blocking",
     ctx: Context | None = None,
 ) -> str | dict[str, str]:
     """Alias for :func:`hitl_collect`. Use whichever name reads more naturally."""
@@ -177,6 +236,7 @@ async def hitl_ask(
         project_id=project_id,
         step=step,
         total_steps=total_steps,
+        urgency=urgency,
         ctx=ctx,
     )
 
@@ -195,6 +255,7 @@ async def hitl_choose(
     project_id: str | None = None,
     step: int | None = None,
     total_steps: int | None = None,
+    urgency: Literal["blocking", "soon", "fyi"] = "blocking",
     ctx: Context | None = None,
 ) -> str | list[str] | dict[str, str] | dict[str, Any]:
     """Present a list of options for the user to select from.
@@ -212,12 +273,27 @@ async def hitl_choose(
         project_id: Project identifier for session grouping.
         step: Current step number.
         total_steps: Total steps in workflow.
+        urgency: ``"blocking"`` always waits; ``"soon"``/``"fyi"`` defer to morning-batch
+            when TUI is unavailable.
 
     Returns:
         Selected value (string) or list of values when ``multiple=True``.
     """
     if not choices and not options:
         raise ValueError("At least one of 'choices' or 'options' must be provided")
+
+    # Morning-batch: defer non-blocking choices when TUI is unavailable
+    if urgency in ("soon", "fyi") and get_tui_queue() is None:
+        result = _defer_question(
+            message=message,
+            urgency=urgency,
+            notes=notes,
+            context=context,
+            agent_name=agent_name,
+            project_id=project_id,
+        )
+        log_interaction("hitl_choose", 0, "cancel", message=message, result=str(result)[:80], notes=notes)
+        return result
 
     display_to_value: dict[str, str] | None = None
     if options and not choices:
