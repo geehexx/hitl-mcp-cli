@@ -6,6 +6,7 @@ import asyncio
 import time
 from typing import Any, Literal
 
+from .._config import resolve_timeout
 from .._server_core import (
     Context,
     get_client_name,
@@ -36,7 +37,8 @@ async def hitl_confirm(
     Args:
         message: Clear yes/no question explaining the action.
         default: Default answer; use ``False`` for destructive operations.
-        severity: ``"low"`` (default yes), ``"medium"`` (standard), ``"high"`` (red warning, requires typed confirmation).
+        severity: ``"low"`` (default yes), ``"medium"`` (standard),
+            ``"high"`` (red warning, requires typed confirmation).
         context: Additional context displayed in a panel above the prompt.
         timeout_seconds: ``0`` for infinite wait, ``>0`` for timed confirmation.
         notes: Freeform context displayed as a dimmed line below the prompt.
@@ -63,11 +65,12 @@ async def hitl_confirm(
         "step": step,
         "total_steps": total_steps,
     }
+    effective_timeout = resolve_timeout(timeout_seconds)
     try:
-        if timeout_seconds > 0:
+        if effective_timeout > 0:
             tui_result: dict[str, Any] = await asyncio.wait_for(
                 tui_enqueue("hitl_confirm", tui_params, client_name=client_name, session_id=session_id),
-                timeout=timeout_seconds,
+                timeout=effective_timeout,
             )
             ms = int((time.monotonic() - t0) * 1000)
             log_interaction("hitl_confirm", ms, "value", message=message, result=str(tui_result), notes=notes)
