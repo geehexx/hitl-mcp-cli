@@ -242,6 +242,8 @@ async def hitl_choose(
             "message": message,
             "choices": choices,
             "multiple": multiple,
+            "default": default,
+            "fuzzy_search": fuzzy_search,
             "notes": notes,
             "context": context,
             "project_id": project_id,

@@ -36,7 +36,7 @@ async def hitl_confirm(
 
     Args:
         message: Clear yes/no question explaining the action.
-        default: Default answer; use ``False`` for destructive operations.
+        default: Default answer forwarded to the TUI; use ``False`` for destructive operations.
         severity: ``"low"`` (default yes), ``"medium"`` (standard),
             ``"high"`` (red warning, requires typed confirmation).
         context: Additional context displayed in a panel above the prompt.
@@ -58,6 +58,7 @@ async def hitl_confirm(
 
     tui_params: dict[str, Any] = {
         "message": message,
+        "default": default,
         "severity": severity,
         "context": context,
         "notes": notes,

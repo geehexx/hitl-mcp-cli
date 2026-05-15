@@ -98,7 +98,7 @@ class TestToolExecution:
         task = _resolve(tui_queue, "/home/user/config.yaml")
         result = await mcp_client.call_tool(
             "hitl_collect",
-            {"message": "Select file:", "input_type": "path"},
+            {"message": "Select file:", "input_type": "path", "path_type": "any"},
         )
         await task
         assert result is not None

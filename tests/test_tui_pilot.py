@@ -31,7 +31,7 @@ def _req(
     tool: str = "hitl_confirm",
     params: dict[str, Any] | None = None,
 ) -> HITLRequest:
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return HITLRequest(tool=tool, params=params or {}, future=loop.create_future())
 
 

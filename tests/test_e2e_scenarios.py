@@ -106,7 +106,10 @@ class TestMultiStepCollection:
     @pytest.mark.asyncio
     async def test_path_then_confirm(self, mcp_client: Client, tui_queue: HITLQueue) -> None:
         task1 = _resolve_with(tui_queue, "/home/user/config.yaml")
-        r1 = await mcp_client.call_tool("hitl_collect", {"message": "Config file:", "input_type": "path"})
+        r1 = await mcp_client.call_tool(
+            "hitl_collect",
+            {"message": "Config file:", "input_type": "path", "path_type": "any"},
+        )
         await task1
         assert r1.data == "/home/user/config.yaml"
 

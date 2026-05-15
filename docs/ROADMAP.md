@@ -18,7 +18,7 @@
 
 - MCP elicitation surface (form mode with JSON Schema, URL mode for browser callbacks). Targets CC v2.1.76+ Elicitation hooks.
 - Timeout-then-poll state machine: tools return `{"status": "timeout", "question_id": "...", "poll_url": "queue://question/<id>", "retry_after": ...}` on expiry; agent re-blocks via `hitl_poll`.
-- Configurable wait-time settings: env `HITL_DEFAULT_WAIT_MIN`, `HITL_MIN_WAIT_MIN`, `HITL_MAX_WAIT_MIN`; per-call `max_wait_minutes` clamped within env range.
+- Configurable wait-time settings: env `HITL_DEFAULT_WAIT`, `HITL_MIN_WAIT`, `HITL_MAX_WAIT`; per-call `max_wait_minutes` clamped within env range.
 - User-availability resource: `session://user-availability` declaring user's "available for ≤N min" cap.
 - Coverage gate raised to 80% line / 60% branch.
 

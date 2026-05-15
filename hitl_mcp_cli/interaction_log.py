@@ -30,7 +30,9 @@ def _rotate_if_needed() -> None:
     """Rename log to .1 if it exceeds MAX_LOG_SIZE."""
     if LOG_FILE.exists() and LOG_FILE.stat().st_size > MAX_LOG_SIZE:
         try:
-            LOG_FILE.rename(LOG_FILE.with_suffix(".jsonl.1"))
+            backup = LOG_FILE.with_suffix(".jsonl.1")
+            backup.unlink(missing_ok=True)
+            LOG_FILE.rename(backup)
         except FileNotFoundError:
             pass
 

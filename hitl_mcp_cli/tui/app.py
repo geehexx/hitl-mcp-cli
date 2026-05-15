@@ -584,7 +584,7 @@ class HITLApp(App[None]):
                                 await self._restore_event.wait()
                                 self._restore_event.clear()
                                 # Mark back to pending while re-pushing
-                                self._hitl_queue._by_id.get(request.request_id)
+                                self._hitl_queue.get_by_id(request.request_id)
                                 self._update_queue_row_status(request.request_id, "pending")
                                 # Screen was re-pushed by action_restore_prompt;
                                 # create a fresh instance to avoid compose errors.

@@ -13,11 +13,11 @@ from hitl_mcp_cli.tui.queue import HITLQueue, HITLRequest
 
 def _make_request(priority: int) -> HITLRequest:
     """Build a minimal HITLRequest at a given priority for property testing."""
-    loop = asyncio.new_event_loop()
     try:
-        future: asyncio.Future[object] = loop.create_future()
-    finally:
-        loop.close()
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+    future: asyncio.Future[object] = loop.create_future()
     return HITLRequest(tool="t", params={"message": "m"}, future=future, priority=priority)
 
 
@@ -60,7 +60,11 @@ def test_status_marker_is_idempotent(status: str) -> None:
     """Calling ``mark_*`` repeatedly leaves the request in the same final state."""
     queue = HITLQueue()
     req = _make_request(5)
-    asyncio.new_event_loop().run_until_complete(queue.put(req))
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(queue.put(req))
+    finally:
+        loop.close()
 
     marker = getattr(queue, f"mark_{status}")
     if status == "answered":
