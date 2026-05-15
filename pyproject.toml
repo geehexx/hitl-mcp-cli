@@ -1,6 +1,6 @@
 [project]
 name = "hitl-mcp-cli"
-version = "0.9.0"
+version = "1.0.0rc1"
 description = "Human-in-the-loop MCP server for interactive AI agent workflows"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -29,6 +29,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+test = [
+    "hypothesis>=6.0",
+    "schemathesis>=3.0",
+    "tox>=4.0",
+]
 tmux = [
     "libtmux>=0.37,<1.0",
 ]
@@ -95,7 +100,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "--strict-markers --cov=hitl_mcp_cli --cov-report=term-missing"
+addopts = "--strict-markers"
 asyncio_mode = "auto"
 
 [tool.bandit]

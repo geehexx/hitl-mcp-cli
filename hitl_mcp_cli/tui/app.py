@@ -149,7 +149,9 @@ class HITLApp(App[None]):
         )
 
         log = self.query_one("#output-log", RichLog)
-        log.write("[bold cyan]HITL MCP Server[/bold cyan] [dim]v0.9.0[/dim]")
+        from hitl_mcp_cli import __version__ as _v
+
+        log.write(f"[bold cyan]HITL MCP Server[/bold cyan] [dim]v{_v}[/dim]")
         log.write(f"[dim]Listening on http://{self._host}:{self._port}[/dim]")
         log.write(
             "[dim]Press [bold]q[/bold] to quit, [bold]f2[/bold] log level, [bold]ctrl+l[/bold] clear, "

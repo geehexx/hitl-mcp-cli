@@ -171,3 +171,54 @@ Change in `cli.py`:
 ```python
 mcp.run(transport="stdio", ...)
 ```
+
+
+## v1.0 — MCP three-primitive idiom
+
+As of v1.0.0rc1, the FastMCP instance is fed by three disjoint packages mirroring the MCP spec primitives:
+
+```
+hitl_mcp_cli/
+├── _server_core.py     # FastMCP instance + TUI wiring (private; not public API)
+├── server.py           # Re-exports for back-compat — thin entry-point
+├── tools/              # Model-controlled actions (block on user, side-effects)
+│   ├── _collect.py     # hitl_collect, hitl_ask, hitl_choose
+│   ├── _confirm.py     # hitl_confirm
+│   └── _notify.py      # hitl_notify
+├── resources/          # Application-controlled read-only data (polled by client)
+│   ├── _pending.py     # queue://pending
+│   ├── _history.py     # queue://history
+│   ├── _session_activity.py     # session://activity
+│   └── _last_action_age.py      # session://last-user-action-age
+├── prompts/            # User-controlled reusable templates
+│   ├── _arch_fork.py        # hitl_architectural_fork
+│   ├── _destructive.py      # hitl_destructive_action
+│   ├── _scope_clarify.py    # hitl_scope_clarification
+│   └── _panel_vote.py       # hitl_panel_vote_summary
+└── tui/                # Textual TUI layer (unchanged)
+    ├── app.py
+    ├── queue.py
+    └── screens.py
+```
+
+### Primitive cheat-sheet
+
+| Primitive | Who controls | When to use | Example |
+|-----------|--------------|-------------|---------|
+| **Tool**     | Model (agent) | Take an action with side effects (block on user, write log, dispatch UI) | `hitl_confirm` |
+| **Resource** | Application (host) | Read-only state the agent / host can poll for context | `queue://pending` |
+| **Prompt**   | User | Reusable template the user invokes via slash command | `/hitl_architectural_fork` |
+
+### Why split now
+
+- **Discoverability**: each package's `__init__.py` documents what's registered there. New contributors don't grep the 450-line `server.py`.
+- **Testability**: each primitive is one short module; mocking is at the package boundary, not the FastMCP boundary.
+- **Forward-compat**: v1.1 adds elicitation surfaces; v1.2 adds an A2A endpoint. Both land as new packages alongside `tools/` / `resources/` / `prompts/` without touching the existing public API.
+
+### Resource polling vs subscription
+
+CC has closed MCP resource subscriptions as `not_planned`
+(anthropics/claude-code#7252). Resources in this server therefore return a
+fresh JSON snapshot on every fetch — clients should poll at a cadence matching
+their refresh tolerance (recommended: 1-5s for `queue://pending`, 10s+ for
+`session://*`).

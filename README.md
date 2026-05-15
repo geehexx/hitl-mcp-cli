@@ -742,3 +742,23 @@ Built with:
 Made with ❤️ for the AI agent community
 
 </div>
+
+
+## v1.0.0rc1 — MCP three-primitive idiom
+
+As of v1.0.0rc1, the server splits its surface across the three MCP primitive types per the [MCP spec idiom](https://modelcontextprotocol.io/specification):
+
+| Primitive | Surface | What you get |
+|-----------|---------|--------------|
+| **Tools** (5) | `hitl_collect` / `hitl_ask` / `hitl_choose` / `hitl_confirm` / `hitl_notify` | Model-controlled actions; block on user response. Same signatures as v0.9.0. |
+| **Resources** (4) | `queue://pending`, `queue://history`, `session://activity`, `session://last-user-action-age` | Read-only JSON snapshots of live HITL state. Polled by clients (CC has closed subscriptions as `not_planned`). |
+| **Prompts** (4) | `hitl_architectural_fork`, `hitl_destructive_action`, `hitl_scope_clarification`, `hitl_panel_vote_summary` | User-controlled reusable templates for common HITL decision shapes. Invoke via slash command in the MCP host. |
+
+### What's not in v1.0
+
+The v1.0 line ships the foundational refactor only. The following land in subsequent releases:
+
+- **v1.1** — MCP elicitation (form / URL modes per CC v2.1.76+), timeout-then-poll state machine, configurable wait-time settings.
+- **v1.2** — auq-mcp-server feature parity (native OS notifications, question rejection, agent-skills support), A2A v1.0 endpoint + AgentCard, phraseturner content-quality integration.
+
+See `docs/ROADMAP.md` and `CHANGELOG.md` for the full migration guide.

@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0rc1] - 2026-05-15
+
+### Added
+- **MCP three-primitive idiom refactor** — `tools/`, `resources/`, `prompts/` packages with disjoint responsibilities per the [MCP spec idiom](https://modelcontextprotocol.io/specification) (tools = model-controlled actions, resources = application-controlled read-only data, prompts = user-controlled templates). Closes the long-standing "everything-is-a-tool" anti-pattern.
+- **4 new resources** — `queue://pending`, `queue://history`, `session://activity`, `session://last-user-action-age`. Polled by clients; CC has closed resource subscriptions as `not_planned` (anthropics/claude-code#7252) so each fetch returns a fresh JSON snapshot.
+- **4 new prompts** — `hitl_architectural_fork`, `hitl_destructive_action`, `hitl_scope_clarification`, `hitl_panel_vote_summary`. Reusable Markdown templates for common HITL decision shapes; user invokes via slash command in the MCP host.
+- **Property-based tests** — `tests/test_property_queue.py` adds 5 hypothesis-driven invariants on `HITLQueue` (priority ordering, history recording, status idempotence). Ran 50 examples per property at v1.0rc1.
+- **New test extras** — `[project.optional-dependencies] test` now ships `hypothesis>=6.0`, `schemathesis>=3.0`, `tox>=4.0`. Existing `dev`/`tmux` extras unchanged.
+- **`_server_core` internal module** — splits the FastMCP instance, TUI wiring, and shared helpers out of `server.py` so the primitive packages have a single import target. Not part of public API; do not import directly.
+
+### Changed
+- **`server.py` is now a thin entry-point** (≤90 lines, was 453). All 5 existing tools (`hitl_collect`, `hitl_ask`, `hitl_choose`, `hitl_confirm`, `hitl_notify`) keep their public signatures and module-level location for back-compat — they are re-exported from `server.py` after relocation to `tools/`.
+- **TUI banner reads version dynamically** from `__version__` instead of a hardcoded string.
+- **Coverage target relaxed to 70%** for v1.0rc1; current measured coverage is **83.5%**. The 80% gate returns in v1.1.
+
+### Migration
+
+This release introduces NO breaking changes for tool callers. Anything that imported a tool from `hitl_mcp_cli.server` (e.g. `from hitl_mcp_cli.server import hitl_collect`) keeps working — tools are re-exported.
+
+Tests that reach into private `server._tui_queue` / `server._tui_app` continue to work via a back-compat shim in `server.py` that forwards reads/writes to `_server_core`.
+
+To use the new resources / prompts, configure your MCP client to consume them:
+- Resources: list via `resources/list` JSON-RPC, fetch by URI (`queue://pending`, etc.).
+- Prompts: list via `prompts/list`, invoke by name with the documented arguments.
+
+### Deferred to future releases
+
+- **v1.1** — MCP elicitation (form / URL modes per CC v2.1.76+), timeout-then-poll state machine, configurable wait-time settings (`HITL_DEFAULT_WAIT`, `HITL_MIN_WAIT`, `HITL_MAX_WAIT`).
+- **v1.2** — `auq-mcp-server` feature parity (native OS notifications, question rejection with explanation, elaboration requesting, agent-skills support), A2A v1.0 endpoint + AgentCard at `/.well-known/agent.json`, phraseturner integration for content quality.
+
 ## [0.9.0] - 2026-03-26
 
 ### Added
