@@ -1,0 +1,36 @@
+# lefthook.yml — git hooks for hitl-mcp-cli
+#
+# Runs checks against staged files only so commits stay fast.
+# Uses uv for all tool invocations (project standard).
+#
+# Install once: lefthook install
+# Disable for a specific commit: LEFTHOOK=0 git commit
+
+pre-commit:
+  parallel: true
+  commands:
+    ruff-check:
+      glob: "{hitl_mcp_cli,tests}/**/*.py"
+      run: uv run ruff check --fix {staged_files}
+      stage_fixed: true
+    ruff-format:
+      glob: "{hitl_mcp_cli,tests}/**/*.py"
+      run: uv run ruff format {staged_files}
+      stage_fixed: true
+      depends: ["ruff-check"]
+    mypy:
+      glob: "hitl_mcp_cli/**/*.py"
+      run: uv run mypy hitl_mcp_cli/
+    pytest-unit:
+      glob: "{hitl_mcp_cli,tests}/**/*.py"
+      run: uv run pytest tests/ -x -q --tb=short
+    bandit:
+      glob: "hitl_mcp_cli/**/*.py"
+      run: uvx bandit -r {staged_files} --severity-level medium -q
+    gitleaks:
+      run: gitleaks protect --staged --redact --no-banner
+
+pre-push:
+  commands:
+    check-all:
+      run: uv run poe check
