@@ -146,7 +146,7 @@ class ConfirmScreen(Screen[dict[str, Any]]):
     }
     #confirm-dialog {
         width: 95%;
-        max-width: 120;
+        max-width: 90;
         height: auto;
         max-height: 90%;
         padding: 1 2;
@@ -252,7 +252,7 @@ class CollectScreen(Screen[str | dict[str, str]]):
     }
     #collect-dialog {
         width: 95%;
-        max-width: 120;
+        max-width: 90;
         height: 90%;
         padding: 1 2;
         background: $surface;
@@ -427,7 +427,7 @@ class ChooseScreen(Screen[str | list[str] | dict[str, str]]):
     }
     #choose-dialog {
         width: 95%;
-        max-width: 120;
+        max-width: 90;
         height: auto;
         max-height: 90%;
         padding: 1 2;
@@ -574,7 +574,7 @@ class NotifyScreen(Screen[bool]):
     }
     #notify-dialog {
         width: 95%;
-        max-width: 120;
+        max-width: 90;
         height: auto;
         max-height: 90%;
         padding: 1 2;

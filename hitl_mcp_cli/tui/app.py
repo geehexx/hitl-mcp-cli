@@ -119,7 +119,7 @@ class HITLApp(App[None]):
                 yield Label("Activity", classes="pane-title")
                 yield RichLog(id="output-log", highlight=True, auto_scroll=True, markup=True, wrap=True)
             with Vertical(id="queue-pane"):
-                yield Label("Queue  [[+] Expand All]", id="queue-title", classes="pane-title")
+                yield Label("Queue  [+]", id="queue-title", classes="pane-title")
                 yield DataTable(id="queue-table", show_cursor=True, zebra_stripes=True, cursor_type="row")
         yield Label("[blue]INFO[/blue]  Sessions: 0  Queue: 0", id="status-bar")
         yield Footer()
@@ -127,7 +127,8 @@ class HITLApp(App[None]):
     def _status_text(self) -> str:
         level = self.min_level
         style = LEVEL_STYLES.get(level, "blue")
-        return f"[{style}]{level}[/{style}]  Sessions: {self.session_count}  Queue: {self.queue_count}"
+        queue_style = "bold yellow" if self.queue_count > 0 else "dim"
+        return f"[{style}]{level}[/{style}]  Sessions: {self.session_count}  Queue: [{queue_style}]{self.queue_count}[/{queue_style}]"
 
     def on_mount(self) -> None:
         """Initialize tables, start server + queue worker."""
@@ -136,7 +137,7 @@ class HITLApp(App[None]):
         self._hitl_queue.set_textual_loop(asyncio.get_running_loop())
 
         st = self.query_one("#sessions-table", DataTable)
-        st.add_columns("Client", "Project", "Calls", "Pending", "Last active")
+        st.add_columns("Client", "Pend", "Last")
 
         qt = self.query_one("#queue-table", DataTable)
         qt.add_columns(
@@ -233,7 +234,7 @@ class HITLApp(App[None]):
     def action_toggle_expand_all(self) -> None:
         """Toggle expand/collapse all queue rows."""
         self._queue_expanded = not self._queue_expanded
-        label = "Queue  [[-] Collapse All]" if self._queue_expanded else "Queue  [[+] Expand All]"
+        label = "Queue  [-]" if self._queue_expanded else "Queue  [+]"
         try:
             self.query_one("#queue-title", Label).update(label)
         except Exception:
@@ -304,14 +305,10 @@ class HITLApp(App[None]):
         for session_id, s in sorted_sessions:
             style = _session_style(s.get("last_active_ts", 0.0))
             client = s.get("client_name", "unknown")
-            project = s.get("project_id", "")
-            calls = str(s["calls"])
             pending = str(s["pending"])
             last = s["last_active"]
             table.add_row(
                 Text(client, style=style),
-                Text(project or "", style=style),
-                Text(calls, style=style),
                 Text(pending, style=style),
                 Text(last, style=style),
                 key=session_id,
@@ -396,7 +393,7 @@ class HITLApp(App[None]):
     def add_queue_row(self, request_id: str, tool: str, message: str, request: Any = None) -> None:
         """Add a row to the queue table. Call via call_from_thread."""
         table = self.query_one("#queue-table", DataTable)
-        short_msg = message[:30] + "..." if len(message) > 30 else message
+        short_msg = message[:55] + "…" if len(message) > 55 else message
         row_count = table.row_count + 1
         elapsed_text = Text("0s", style="dim", justify="right")
         table.add_row(
