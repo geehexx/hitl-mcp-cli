@@ -49,7 +49,7 @@ def test_cli_tui_mode() -> None:
     from hitl_mcp_cli.cli import main
 
     with patch("sys.argv", ["hitl-mcp"]):
-        with patch("hitl_mcp_cli.cli.mcp") as mock_mcp:
+        with patch("hitl_mcp_cli.server.mcp") as mock_mcp:
             mock_mcp.http_app.return_value = MagicMock()
             with patch("hitl_mcp_cli.server.configure_tui_mode"):
                 with patch("hitl_mcp_cli.tui.HITLApp.run") as mock_run:

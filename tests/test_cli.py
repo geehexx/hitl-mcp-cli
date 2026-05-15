@@ -40,7 +40,7 @@ def test_cli_launches_tui() -> None:
         patch("hitl_mcp_cli.server.configure_tui_mode") as mock_configure,
         patch("hitl_mcp_cli.tui.HITLApp") as mock_app_cls,
         patch("hitl_mcp_cli.tui.queue.HITLQueue"),
-        patch("hitl_mcp_cli.cli.mcp") as mock_mcp,
+        patch("hitl_mcp_cli.server.mcp") as mock_mcp,
     ):
         mock_mcp.http_app.return_value = MagicMock()
         mock_app_cls.return_value = MagicMock()

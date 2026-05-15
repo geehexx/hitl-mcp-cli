@@ -4,8 +4,6 @@ import argparse
 import logging
 import os
 
-from .server import mcp
-
 # Configure logging level from environment
 log_level = os.getenv("HITL_LOG_LEVEL", "ERROR").upper()
 logging.basicConfig(
@@ -39,7 +37,7 @@ def main() -> None:
 
     logger.info(f"Starting HITL MCP server on {args.host}:{args.port}")
 
-    from .server import configure_tui_mode
+    from .server import configure_tui_mode, mcp
     from .tui import HITLApp, HITLQueue
 
     queue = HITLQueue()

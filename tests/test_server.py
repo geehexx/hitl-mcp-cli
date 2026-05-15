@@ -411,7 +411,7 @@ async def test_stateless_http_transport() -> None:
             patch("hitl_mcp_cli.server.configure_tui_mode"),
             patch("hitl_mcp_cli.tui.HITLApp") as mock_app_cls,
             patch("hitl_mcp_cli.tui.HITLQueue"),
-            patch("hitl_mcp_cli.cli.mcp") as mock_cli_mcp,
+            patch("hitl_mcp_cli.server.mcp") as mock_cli_mcp,
             patch("sys.argv", ["hitl-mcp"]),
         ):
             mock_cli_mcp.http_app.return_value = MagicMock()
