@@ -19,6 +19,6 @@ subscribe — the server intentionally returns a fresh snapshot on each fetch.
 
 from __future__ import annotations
 
-from . import _history, _last_action_age, _pending, _session_activity  # noqa: F401
+from . import _history, _last_action_age, _metrics, _pending, _session_activity  # noqa: F401
 
 __all__: list[str] = []
