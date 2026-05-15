@@ -17,6 +17,7 @@ pre-commit:
       glob: "{hitl_mcp_cli,tests}/**/*.py"
       run: uv run ruff format {staged_files}
       stage_fixed: true
+      depends: ["ruff-check"]
     mypy:
       glob: "hitl_mcp_cli/**/*.py"
       run: uv run mypy hitl_mcp_cli/
