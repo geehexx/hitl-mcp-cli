@@ -458,6 +458,8 @@ class ChooseScreen(Screen[str | list[str] | dict[str, str]]):
         self._choices: list[str] = request.params.get("choices", [])
         self._options: list[dict[str, str]] = request.params.get("options", [])
         self._multiple: bool = request.params.get("multiple", False)
+        self._fuzzy: bool = request.params.get("fuzzy_search", False)
+        self._default: str | None = request.params.get("default")
         self._selected: set[str] = set()
         self._notes: str | None = request.params.get("notes")
         self._ctx_text: str | None = request.params.get("context")
@@ -511,10 +513,35 @@ class ChooseScreen(Screen[str | list[str] | dict[str, str]]):
                     yield Button("Done", variant="success", id="done")
                     yield Button("Cancel", variant="error", id="cancel")
             else:
+                if self._fuzzy:
+                    yield Input(placeholder="Filter choices...", id="fuzzy-input")
                 yield OptionList(*self._build_options(), id="choose-list")
-                yield Input(placeholder="Or type a custom value...", id="custom-input")
+                if not self._fuzzy:
+                    yield Input(placeholder="Or type a custom value...", id="custom-input")
                 with Horizontal():
                     yield Button("Cancel", variant="error", id="cancel")
+
+    @on(Input.Changed, "#fuzzy-input")
+    def _on_fuzzy_changed(self, event: Input.Changed) -> None:
+        """Filter the OptionList to entries containing the typed text."""
+        query = event.value.lower()
+        option_list = self.query_one("#choose-list", OptionList)
+        option_list.clear_options()
+        filtered = [
+            (orig_idx, choice) for orig_idx, choice in enumerate(self._choices) if query in choice.lower()
+        ]
+        for orig_idx, choice in filtered:
+            option_list.add_option(Option(choice, id=f"choice-{orig_idx}"))
+
+    def on_mount(self) -> None:
+        """Highlight the default option if one was specified."""
+        if self._default is None or self._multiple:
+            return
+        option_list = self.query_one("#choose-list", OptionList)
+        for idx, choice in enumerate(self._choices):
+            if choice == self._default:
+                option_list.highlighted = idx
+                break
 
     @on(OptionList.OptionSelected, "#choose-list")
     def _on_option_selected(self, event: OptionList.OptionSelected) -> None:

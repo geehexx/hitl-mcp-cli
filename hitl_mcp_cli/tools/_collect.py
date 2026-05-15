@@ -236,12 +236,15 @@ async def hitl_choose(
     client_name = get_client_name(ctx, agent_name)
     session_id = get_session_id(ctx)
 
+    auto_fuzzy = fuzzy_search if fuzzy_search is not None else (len(choices) > 15)
     result = await tui_enqueue(
         "hitl_choose",
         {
             "message": message,
             "choices": choices,
             "multiple": multiple,
+            "fuzzy_search": auto_fuzzy,
+            "default": default,
             "notes": notes,
             "context": context,
             "project_id": project_id,
