@@ -275,6 +275,131 @@ async def test_hitl_choose_escape_hatch_all_selected(mcp_client: Client, tui_que
 
 
 @pytest.mark.asyncio
+async def test_metrics_summary_no_queue() -> None:
+    """metrics://summary returns zeroed payload when TUI queue is not configured."""
+    import json
+
+    from hitl_mcp_cli.server import configure_tui_mode, mcp
+
+    configure_tui_mode(None, None)  # type: ignore[arg-type]
+    try:
+        async with Client(mcp) as client:
+            result = await client.read_resource("metrics://summary")
+        data = json.loads(result[0].text)  # type: ignore[union-attr]
+        assert data["total_questions"] == 0
+        assert data["avg_response_time_s"] is None
+        assert data["active_sessions"] == 0
+        assert data["questions_by_type"] == {}
+        assert "warning" in data
+    finally:
+        configure_tui_mode(None, None)  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_metrics_summary_resolved_at_accuracy(tui_queue: HITLQueue) -> None:
+    """avg_response_time_s only counts items with a _resolved_at timestamp."""
+    import json
+
+    from hitl_mcp_cli.server import mcp
+
+    async with Client(mcp) as client:
+        # Enqueue and resolve one request via mark_answered
+        async def _resolve() -> None:
+            req = await tui_queue.get()
+            tui_queue.mark_answered(req.request_id, "yes")
+            tui_queue.resolve(req, {"action": "accept"})
+
+        task = asyncio.create_task(_resolve())
+        await client.call_tool("hitl_confirm", {"message": "Proceed?"})
+        await task
+
+        # Enqueue a second request but leave it pending (no _resolved_at)
+        pending_task = asyncio.create_task(client.call_tool("hitl_confirm", {"message": "Still waiting?"}))
+        await asyncio.sleep(0.05)  # let it enqueue
+
+        result = await client.read_resource("metrics://summary")
+        data = json.loads(result[0].text)  # type: ignore[union-attr]
+
+        assert data["total_questions"] == 2
+        # avg must be based only on the resolved item, not inflated by pending wait
+        assert data["avg_response_time_s"] is not None
+        assert data["avg_response_time_s"] < 5.0  # not inflated by pending item
+
+        # clean up pending request
+        req2 = await tui_queue.get()
+        tui_queue.mark_cancelled(req2.request_id)
+        tui_queue.resolve(req2, {"action": "decline"})
+        await pending_task
+
+
+@pytest.mark.asyncio
+async def test_metrics_summary_pending_excluded_from_avg(tui_queue: HITLQueue) -> None:
+    """avg_response_time_s is None when all requests are still pending."""
+    import json
+
+    from hitl_mcp_cli.server import mcp
+
+    async with Client(mcp) as client:
+        pending_task = asyncio.create_task(client.call_tool("hitl_confirm", {"message": "Waiting?"}))
+        await asyncio.sleep(0.05)
+
+        result = await client.read_resource("metrics://summary")
+        data = json.loads(result[0].text)  # type: ignore[union-attr]
+
+        assert data["total_questions"] == 1
+        assert data["avg_response_time_s"] is None  # no resolved items yet
+
+        req = await tui_queue.get()
+        tui_queue.mark_cancelled(req.request_id)
+        tui_queue.resolve(req, {"action": "decline"})
+        await pending_task
+
+
+@pytest.mark.asyncio
+async def test_metrics_resolved_at_set_on_mark_answered() -> None:
+    """mark_answered sets _resolved_at on the request."""
+    import time
+
+    from hitl_mcp_cli.tui.queue import HITLQueue, HITLRequest
+
+    queue = HITLQueue()
+    loop = asyncio.get_running_loop()
+    future: asyncio.Future[object] = loop.create_future()
+    req = HITLRequest(tool="hitl_confirm", params={}, future=future)
+    queue._register(req)
+
+    assert req._resolved_at is None
+    t_before = time.monotonic()
+    queue.mark_answered(req.request_id, "yes")
+    t_after = time.monotonic()
+
+    assert req._resolved_at is not None
+    assert t_before <= req._resolved_at <= t_after
+
+
+@pytest.mark.asyncio
+async def test_metrics_resolved_at_set_on_mark_cancelled() -> None:
+    """mark_cancelled sets _resolved_at on the request."""
+    import time
+
+    from hitl_mcp_cli.tui.queue import HITLQueue, HITLRequest
+
+    queue = HITLQueue()
+    loop = asyncio.get_running_loop()
+    future: asyncio.Future[object] = loop.create_future()
+    req = HITLRequest(tool="hitl_confirm", params={}, future=future)
+    queue._register(req)
+
+    assert req._resolved_at is None
+    t_before = time.monotonic()
+    queue.mark_cancelled(req.request_id)
+    t_after = time.monotonic()
+
+    assert req._resolved_at is not None
+    assert t_before <= req._resolved_at <= t_after
+
+
+@pytest.mark.asyncio
 async def test_stateless_http_transport() -> None:
     """Regression: server must use stateless_http=True for independent HTTP requests."""
     from unittest.mock import MagicMock

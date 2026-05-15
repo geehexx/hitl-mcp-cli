@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import time
 
 from .._server_core import get_tui_app, get_tui_queue
 from .._server_core import mcp as _mcp
@@ -34,7 +33,6 @@ def metrics_summary() -> str:
             }
         )
 
-    now = time.monotonic()
     total = len(queue.history)
 
     questions_by_type: dict[str, int] = {}
@@ -44,8 +42,8 @@ def metrics_summary() -> str:
         questions_by_type[req.tool] = questions_by_type.get(req.tool, 0) + 1
         if req.status in ("answered", "cancelled"):
             resolved_at = getattr(req, "_resolved_at", None)
-            elapsed = (resolved_at - req.created_at) if resolved_at is not None else (now - req.created_at)
-            response_times.append(elapsed)
+            if resolved_at is not None:
+                response_times.append(resolved_at - req.created_at)
 
     avg_response_time = round(sum(response_times) / len(response_times), 3) if response_times else None
 

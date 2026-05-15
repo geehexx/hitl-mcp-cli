@@ -47,6 +47,7 @@ class HITLRequest:
     # Status tracking (v0.9.0)
     status: str = "pending"  # "pending", "answered", "cancelled", "minimized"
     answer_preview: str = ""  # truncated answer for display
+    _resolved_at: float | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         self.params = _sanitize_params(self.params)
@@ -97,12 +98,14 @@ class HITLQueue:
         if req is not None:
             req.status = "answered"
             req.answer_preview = answer_preview[:60]
+            req._resolved_at = time.monotonic()
 
     def mark_cancelled(self, request_id: str) -> None:
         """Mark a request as cancelled."""
         req = self._by_id.get(request_id)
         if req is not None:
             req.status = "cancelled"
+            req._resolved_at = time.monotonic()
 
     def mark_minimized(self, request_id: str) -> None:
         """Mark a request as minimized."""
