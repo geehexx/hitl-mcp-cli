@@ -134,9 +134,15 @@ class HITLQueue:
             self._queue.put_nowait(item)
 
     async def get(self) -> HITLRequest:
-        """Dequeue the next highest-priority request. Awaits if empty."""
-        _, _, request = await self._queue.get()
-        return request
+        """Dequeue the next highest-priority request. Awaits if empty.
+
+        Skips requests whose futures are already done (cancelled by wait_for
+        timeout) — those are stale and should not be dispatched to the TUI.
+        """
+        while True:
+            _, _, request = await self._queue.get()
+            if not request.future.done():
+                return request
 
     def resolve(self, request: HITLRequest, result: Any) -> None:
         """Resolve a request's future with the user's response.
