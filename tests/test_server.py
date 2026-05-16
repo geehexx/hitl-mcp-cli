@@ -49,10 +49,11 @@ async def test_tools_list(mcp_client: Client) -> None:
         "hitl_choose",
         "hitl_confirm",
         "hitl_notify",
+        "hitl_poll",
     }
 
     assert tool_names == expected_tools
-    assert len(tools) == 5
+    assert len(tools) == 6
 
 
 @pytest.mark.asyncio

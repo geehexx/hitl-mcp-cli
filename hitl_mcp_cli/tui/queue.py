@@ -47,6 +47,8 @@ class HITLRequest:
     # Status tracking (v0.9.0)
     status: str = "pending"  # "pending", "answered", "cancelled", "minimized"
     answer_preview: str = ""  # truncated answer for display
+    # Full answer stored on resolution (used by hitl_poll)
+    resolved_answer: Any = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         self.params = _sanitize_params(self.params)
@@ -147,6 +149,7 @@ class HITLQueue:
         """
         if request.future.done():
             return
+        request.resolved_answer = result
         loop = self._caller_loop
         if loop is not None and loop.is_running():
 

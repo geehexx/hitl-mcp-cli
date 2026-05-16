@@ -14,6 +14,6 @@ Public tools registered here:
 
 from __future__ import annotations
 
-from . import _collect, _confirm, _notify  # noqa: F401  (registers tools)
+from . import _collect, _confirm, _notify, _poll  # noqa: F401  (registers tools)
 
 __all__: list[str] = []
