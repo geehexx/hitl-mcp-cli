@@ -70,9 +70,11 @@ async def hitl_confirm(
         "total_steps": total_steps,
     }
 
-    # max_wait_minutes takes precedence over legacy timeout_seconds
-    if max_wait_minutes is not None:
-        cfg = get_timeout_config()
+    # max_wait_minutes takes precedence over legacy timeout_seconds.
+    # When neither is set, apply the process-wide default_wait so the tool
+    # never waits indefinitely by accident.
+    cfg = get_timeout_config()
+    if max_wait_minutes is not None or timeout_seconds == 0:
         wait_seconds = cfg.clamp(max_wait_minutes) * 60
         question_id = str(uuid4())
         tui_params["_question_id"] = question_id
@@ -92,6 +94,7 @@ async def hitl_confirm(
             log_interaction("hitl_confirm", ms, "timeout", message=message, notes=notes)
             return {"status": "timeout", "question_id": question_id, "retry_after": 60}
 
+    # Legacy path: explicit timeout_seconds > 0
     try:
         if timeout_seconds > 0:
             tui_result = await asyncio.wait_for(
