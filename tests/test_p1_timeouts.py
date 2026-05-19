@@ -30,6 +30,17 @@ def _reset_tui_globals() -> Any:
     _server_core._tui_app = None
 
 
+@pytest.fixture(autouse=True)
+def _pin_timeout_env(monkeypatch: pytest.MonkeyPatch) -> Any:
+    monkeypatch.setenv("HITL_MIN_WAIT_MIN", "0")
+    monkeypatch.setenv("HITL_DEFAULT_WAIT", "0.1")
+    import hitl_mcp_cli.timeout_config as tc
+
+    tc._config = None
+    yield
+    tc._config = None
+
+
 @pytest.fixture
 async def tui_queue() -> Any:
     queue = HITLQueue()
@@ -64,7 +75,9 @@ class TestTimeoutConfig:
     def test_env_vars_override_defaults(self) -> None:
         from hitl_mcp_cli.timeout_config import TimeoutConfig
 
-        with patch.dict(os.environ, {"HITL_DEFAULT_WAIT": "30", "HITL_MIN_WAIT": "2", "HITL_MAX_WAIT": "60"}):
+        with patch.dict(
+            os.environ, {"HITL_DEFAULT_WAIT": "30", "HITL_MIN_WAIT_MIN": "2", "HITL_MAX_WAIT_MIN": "60"}
+        ):
             cfg = TimeoutConfig.from_env()
         assert cfg.default_wait == 30
         assert cfg.min_wait == 2

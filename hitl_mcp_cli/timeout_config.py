@@ -1,9 +1,9 @@
 """Configurable timeout settings for HITL tools.
 
 Env vars (all in minutes):
-    HITL_DEFAULT_WAIT  — default wait if no per-call max_wait_minutes given (default: 15)
-    HITL_MIN_WAIT      — minimum clamp for per-call values (default: 1)
-    HITL_MAX_WAIT      — maximum clamp for per-call values (default: 120)
+    HITL_DEFAULT_WAIT    — default wait if no per-call max_wait_minutes given (default: 15)
+    HITL_MIN_WAIT_MIN    — minimum clamp for per-call values (default: 1)
+    HITL_MAX_WAIT_MIN    — maximum clamp for per-call values (default: 120)
 """
 
 from __future__ import annotations
@@ -14,23 +14,23 @@ from dataclasses import dataclass
 
 @dataclass
 class TimeoutConfig:
-    default_wait: int = 15
-    min_wait: int = 1
-    max_wait: int = 120
+    default_wait: float = 15
+    min_wait: float = 1
+    max_wait: float = 120
 
     @classmethod
     def from_env(cls) -> TimeoutConfig:
         return cls(
-            default_wait=int(os.environ.get("HITL_DEFAULT_WAIT", 15)),
-            min_wait=int(os.environ.get("HITL_MIN_WAIT", 1)),
-            max_wait=int(os.environ.get("HITL_MAX_WAIT", 120)),
+            default_wait=float(os.environ.get("HITL_DEFAULT_WAIT", 15)),
+            min_wait=float(os.environ.get("HITL_MIN_WAIT_MIN", 1)),
+            max_wait=float(os.environ.get("HITL_MAX_WAIT_MIN", 120)),
         )
 
-    def clamp(self, value: float | int | None) -> int:
+    def clamp(self, value: float | int | None) -> float:
         """Return value clamped to [min_wait, max_wait], or default_wait if None."""
         if value is None:
             return self.default_wait
-        return max(self.min_wait, min(self.max_wait, int(value)))
+        return max(self.min_wait, min(self.max_wait, float(value)))
 
 
 _config: TimeoutConfig | None = None

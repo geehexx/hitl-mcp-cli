@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING, Any
 
 from fastmcp import Context, FastMCP
 
+from ._os_notify import send_os_notification
+
 if TYPE_CHECKING:
     from .tui.app import HITLApp
     from .tui.queue import HITLQueue
@@ -105,6 +107,11 @@ async def tui_enqueue(
 
     request = HITLRequest(tool=tool, params=params, future=future)
     queue.put_threadsafe(request)
+
+    # Best-effort OS desktop notification so user knows a question is waiting
+    _notif_title = f"HITL: {tool}"
+    _notif_body = (params.get("message") or tool)[:120]
+    send_os_notification(_notif_title, _notif_body, "info")
 
     if _tui_app is not None:
         project_id = params.get("project_id")

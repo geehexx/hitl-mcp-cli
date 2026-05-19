@@ -9,11 +9,15 @@ Public tools registered here:
     - ``hitl_collect`` / ``hitl_ask``  — collect a single value
     - ``hitl_choose``                  — present a list of options
     - ``hitl_confirm``                 — ask yes/no with severity
-    - ``hitl_notify``                  — non-blocking status update
+    - ``hitl_notify``                  — non-blocking status update (+ OS desktop notification)
+    - ``hitl_poll``                    — re-block on a timed-out question
+    - ``hitl_reject_question``         — signal a malformed/unanswerable question
+    - ``hitl_request_elaboration``     — re-ask with additional context from agent
+    - ``hitl_recommend``               — pre-selected default with timed override window
 """
 
 from __future__ import annotations
 
-from . import _collect, _confirm, _notify, _poll  # noqa: F401  (registers tools)
+from . import _collect, _confirm, _elaborate, _notify, _poll, _recommend, _reject  # noqa: F401
 
 __all__: list[str] = []

@@ -153,9 +153,12 @@ class HITLQueue:
         run_coroutine_threadsafe is wrong here — it's for scheduling
         coroutines, not resolving existing futures.
         """
+        if (
+            request.resolved_answer is None
+        ):  # first-write-wins; cache before done-check so hitl_poll can report it
+            request.resolved_answer = result
         if request.future.done():
             return
-        request.resolved_answer = result
         loop = self._caller_loop
         if loop is not None and loop.is_running():
 

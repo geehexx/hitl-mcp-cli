@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from typing import Literal
 
+from .._os_notify import send_os_notification
 from .._server_core import (
     Context,
     get_client_name,
@@ -65,6 +66,7 @@ async def hitl_notify(
     _ = queue  # queue presence checked by require_tui_queue()
     ms = int((time.monotonic() - t0) * 1000)
     log_interaction("hitl_notify", ms, "value", message=message, notes=notes)
+    send_os_notification(title or "HITL Notification", message[:120], level)
     return {"acknowledged": True}
 
 

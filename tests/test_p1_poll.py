@@ -28,6 +28,17 @@ def _reset_tui_globals() -> Any:
     _server_core._tui_app = None
 
 
+@pytest.fixture(autouse=True)
+def _pin_timeout_env(monkeypatch: pytest.MonkeyPatch) -> Any:
+    monkeypatch.setenv("HITL_MIN_WAIT_MIN", "0")
+    monkeypatch.setenv("HITL_DEFAULT_WAIT", "0.1")
+    import hitl_mcp_cli.timeout_config as tc
+
+    tc._config = None
+    yield
+    tc._config = None
+
+
 @pytest.fixture
 async def tui_queue() -> Any:
     queue = HITLQueue()
