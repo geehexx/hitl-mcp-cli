@@ -116,30 +116,17 @@ async def _collect_impl(
         "_question_id": question_id,
     }
 
-    if max_wait_minutes is not None:
-        cfg = get_timeout_config()
-        wait_seconds = cfg.clamp(max_wait_minutes) * 60
-        try:
-            result = await asyncio.wait_for(
-                tui_enqueue("hitl_collect", tui_params, client_name=client_name, session_id=session_id),
-                timeout=wait_seconds,
-            )
-        except TimeoutError:
-            ms = int((time.monotonic() - t0) * 1000)
-            log_interaction(tool, ms, "timeout", message=message, notes=notes)
-            return {"status": "timeout", "question_id": question_id, "retry_after": 60}
-    else:
-        cfg = get_timeout_config()
-        wait_seconds = cfg.default_wait * 60
-        try:
-            result = await asyncio.wait_for(
-                tui_enqueue("hitl_collect", tui_params, client_name=client_name, session_id=session_id),
-                timeout=wait_seconds,
-            )
-        except TimeoutError:
-            ms = int((time.monotonic() - t0) * 1000)
-            log_interaction(tool, ms, "timeout", message=message, notes=notes)
-            return {"status": "timeout", "question_id": question_id, "retry_after": 60}
+    cfg = get_timeout_config()
+    wait_seconds = cfg.clamp(max_wait_minutes) * 60
+    try:
+        result = await asyncio.wait_for(
+            tui_enqueue("hitl_collect", tui_params, client_name=client_name, session_id=session_id),
+            timeout=wait_seconds,
+        )
+    except TimeoutError:
+        ms = int((time.monotonic() - t0) * 1000)
+        log_interaction(tool, ms, "timeout", message=message, notes=notes)
+        return {"status": "timeout", "question_id": question_id, "retry_after": 60}
 
     out: str | dict[str, str] = result
     if isinstance(result, str):
@@ -360,30 +347,17 @@ async def hitl_choose(
         "_question_id": question_id,
     }
 
-    if max_wait_minutes is not None:
-        cfg = get_timeout_config()
-        wait_seconds = cfg.clamp(max_wait_minutes) * 60
-        try:
-            result = await asyncio.wait_for(
-                tui_enqueue("hitl_choose", tui_params, client_name=client_name, session_id=session_id),
-                timeout=wait_seconds,
-            )
-        except TimeoutError:
-            ms = int((time.monotonic() - t0) * 1000)
-            log_interaction("hitl_choose", ms, "timeout", message=message, notes=notes)
-            return {"status": "timeout", "question_id": question_id, "retry_after": 60}
-    else:
-        cfg = get_timeout_config()
-        wait_seconds = cfg.default_wait * 60
-        try:
-            result = await asyncio.wait_for(
-                tui_enqueue("hitl_choose", tui_params, client_name=client_name, session_id=session_id),
-                timeout=wait_seconds,
-            )
-        except TimeoutError:
-            ms = int((time.monotonic() - t0) * 1000)
-            log_interaction("hitl_choose", ms, "timeout", message=message, notes=notes)
-            return {"status": "timeout", "question_id": question_id, "retry_after": 60}
+    cfg = get_timeout_config()
+    wait_seconds = cfg.clamp(max_wait_minutes) * 60
+    try:
+        result = await asyncio.wait_for(
+            tui_enqueue("hitl_choose", tui_params, client_name=client_name, session_id=session_id),
+            timeout=wait_seconds,
+        )
+    except TimeoutError:
+        ms = int((time.monotonic() - t0) * 1000)
+        log_interaction("hitl_choose", ms, "timeout", message=message, notes=notes)
+        return {"status": "timeout", "question_id": question_id, "retry_after": 60}
 
     ms = int((time.monotonic() - t0) * 1000)
     log_interaction("hitl_choose", ms, "value", message=message, result=str(result)[:80], notes=notes)

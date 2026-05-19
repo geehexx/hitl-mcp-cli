@@ -87,6 +87,12 @@ async def hitl_recommend(
             timeout=float(override_seconds),
         )
         ms = int((time.monotonic() - t0) * 1000)
+        # A cancel sentinel from hitl_choose is a dict with "action": "cancel"
+        if isinstance(result, dict) and result.get("action") == "cancel":
+            log_interaction(
+                "hitl_recommend", ms, "cancel", message=message, result=str(result)[:80], notes=notes
+            )
+            return {"status": "cancelled"}
         log_interaction("hitl_recommend", ms, "value", message=message, result=str(result)[:80], notes=notes)
         return {"status": "user_selected", "value": result}
     except TimeoutError:

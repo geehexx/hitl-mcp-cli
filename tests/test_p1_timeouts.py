@@ -1,7 +1,7 @@
 """RED tests for P1 configurable timeouts.
 
 Spec:
-- env vars: HITL_DEFAULT_WAIT=15, HITL_MIN_WAIT=1, HITL_MAX_WAIT=120 (minutes)
+- env vars: HITL_DEFAULT_WAIT_MIN=15, HITL_MIN_WAIT_MIN=1, HITL_MAX_WAIT_MIN=120 (minutes)
 - per-call max_wait_minutes param on hitl_ask, hitl_choose, hitl_confirm
 - timeout returns: {status: "timeout", question_id: <uuid>, retry_after: 60}
 """
@@ -33,7 +33,7 @@ def _reset_tui_globals() -> Any:
 @pytest.fixture(autouse=True)
 def _pin_timeout_env(monkeypatch: pytest.MonkeyPatch) -> Any:
     monkeypatch.setenv("HITL_MIN_WAIT_MIN", "0")
-    monkeypatch.setenv("HITL_DEFAULT_WAIT", "0.1")
+    monkeypatch.setenv("HITL_DEFAULT_WAIT_MIN", "0.1")
     import hitl_mcp_cli.timeout_config as tc
 
     tc._config = None
@@ -76,7 +76,7 @@ class TestTimeoutConfig:
         from hitl_mcp_cli.timeout_config import TimeoutConfig
 
         with patch.dict(
-            os.environ, {"HITL_DEFAULT_WAIT": "30", "HITL_MIN_WAIT_MIN": "2", "HITL_MAX_WAIT_MIN": "60"}
+            os.environ, {"HITL_DEFAULT_WAIT_MIN": "30", "HITL_MIN_WAIT_MIN": "2", "HITL_MAX_WAIT_MIN": "60"}
         ):
             cfg = TimeoutConfig.from_env()
         assert cfg.default_wait == 30

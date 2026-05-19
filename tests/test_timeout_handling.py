@@ -14,7 +14,7 @@ from hitl_mcp_cli.tui.queue import HITLQueue
 @pytest.fixture(autouse=True)
 def _pin_timeout_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HITL_MIN_WAIT_MIN", "0")
-    monkeypatch.setenv("HITL_DEFAULT_WAIT", "0.1")
+    monkeypatch.setenv("HITL_DEFAULT_WAIT_MIN", "0.1")
     import hitl_mcp_cli.timeout_config as tc
 
     tc._config = None

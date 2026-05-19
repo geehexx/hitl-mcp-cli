@@ -204,7 +204,7 @@ class TestElaborationRequesting:
             assert "Elaboration" in req.params["message"]
             tui_queue.resolve(req, "main")
 
-        _task = asyncio.create_task(_resolve())  # noqa: RUF006
+        _task = asyncio.create_task(_resolve())
         result = await mcp_client.call_tool(
             "hitl_request_elaboration",
             {
@@ -213,6 +213,7 @@ class TestElaborationRequesting:
                 "agent_name": "test-agent",
             },
         )
+        await _task
         assert result.data == "main"
 
     @pytest.mark.asyncio
@@ -227,11 +228,12 @@ class TestElaborationRequesting:
             captured.append(req.params)
             tui_queue.resolve(req, "develop")
 
-        _task = asyncio.create_task(_resolve())  # noqa: RUF006
+        _task = asyncio.create_task(_resolve())
         await mcp_client.call_tool(
             "hitl_request_elaboration",
             {"original_message": "Pick env", "elaboration": "staging or prod"},
         )
+        await _task
         assert captured[0].get("_elaboration") is True
 
 
@@ -267,7 +269,7 @@ class TestQuickRecommendations:
             req = await tui_queue.get()
             tui_queue.resolve(req, "no")
 
-        _task = asyncio.create_task(_resolve())  # noqa: RUF006
+        _task = asyncio.create_task(_resolve())
         result = await mcp_client.call_tool(
             "hitl_recommend",
             {
@@ -277,6 +279,7 @@ class TestQuickRecommendations:
                 "override_seconds": 30,
             },
         )
+        await _task
         assert result.data["status"] == "user_selected"
         assert result.data["value"] == "no"
 
@@ -290,7 +293,7 @@ class TestQuickRecommendations:
             captured.append(req.params)
             tui_queue.resolve(req, "yes")
 
-        _task = asyncio.create_task(_resolve())  # noqa: RUF006
+        _task = asyncio.create_task(_resolve())
         await mcp_client.call_tool(
             "hitl_recommend",
             {
@@ -300,6 +303,7 @@ class TestQuickRecommendations:
                 "override_seconds": 30,
             },
         )
+        await _task
         assert captured[0]["choices"][0] == "yes"
         assert captured[0]["default"] == "yes"
 
@@ -310,11 +314,12 @@ class TestQuickRecommendations:
             req = await tui_queue.get()
             tui_queue.resolve(req, "proceed")
 
-        _task = asyncio.create_task(_resolve())  # noqa: RUF006
+        _task = asyncio.create_task(_resolve())
         result = await mcp_client.call_tool(
             "hitl_recommend",
             {"message": "Proceed?", "recommendation": "proceed", "override_seconds": 30},
         )
+        await _task
         assert result.data["status"] == "user_selected"
         assert result.data["value"] == "proceed"
 

@@ -1,7 +1,7 @@
 """Configurable timeout settings for HITL tools.
 
 Env vars (all in minutes):
-    HITL_DEFAULT_WAIT    — default wait if no per-call max_wait_minutes given (default: 15)
+    HITL_DEFAULT_WAIT_MIN — default wait if no per-call max_wait_minutes given (default: 15)
     HITL_MIN_WAIT_MIN    — minimum clamp for per-call values (default: 1)
     HITL_MAX_WAIT_MIN    — maximum clamp for per-call values (default: 120)
 """
@@ -21,9 +21,9 @@ class TimeoutConfig:
     @classmethod
     def from_env(cls) -> TimeoutConfig:
         return cls(
-            default_wait=float(os.environ.get("HITL_DEFAULT_WAIT", 15)),
-            min_wait=float(os.environ.get("HITL_MIN_WAIT_MIN", 1)),
-            max_wait=float(os.environ.get("HITL_MAX_WAIT_MIN", 120)),
+            default_wait=float(os.environ.get("HITL_DEFAULT_WAIT_MIN", "15")),
+            min_wait=float(os.environ.get("HITL_MIN_WAIT_MIN", "1")),
+            max_wait=float(os.environ.get("HITL_MAX_WAIT_MIN", "120")),
         )
 
     def clamp(self, value: float | int | None) -> float:
