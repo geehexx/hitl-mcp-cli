@@ -22,7 +22,7 @@ from hitl_mcp_cli.tui.queue import HITLQueue
 
 
 @pytest.fixture(autouse=True)
-def _reset_tui_globals() -> Any:
+def _reset_tui_globals() -> None:
     _server_core._tui_queue = None
     _server_core._tui_app = None
     yield

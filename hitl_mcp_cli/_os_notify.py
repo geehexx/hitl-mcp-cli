@@ -19,13 +19,13 @@ def _notify_linux(title: str, body: str, urgency: str) -> bool:
         return False
     ns_urgency = "critical" if urgency == "error" else "normal"
     try:
-        subprocess.run(  # nosec B603 B607
+        completed = subprocess.run(  # nosec B603 B607
             ["notify-send", "--urgency", ns_urgency, "--app-name", "hitl-mcp", title, body],
             timeout=3,
             check=False,
             capture_output=True,
         )
-        return True
+        return completed.returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         return False
 
@@ -34,15 +34,25 @@ def _notify_macos(title: str, body: str) -> bool:
     """Fire osascript display notification. Returns True on success."""
     if not shutil.which("osascript"):
         return False
-    script = f'display notification "{body}" with title "{title}"'
     try:
-        subprocess.run(  # nosec B603 B607
-            ["osascript", "-e", script],
+        completed = subprocess.run(  # nosec B603 B607
+            [
+                "osascript",
+                "-e",
+                "on run argv",
+                "-e",
+                "display notification (item 2 of argv) with title (item 1 of argv)",
+                "-e",
+                "end run",
+                "--",
+                title,
+                body,
+            ],
             timeout=3,
             check=False,
             capture_output=True,
         )
-        return True
+        return completed.returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         return False
 

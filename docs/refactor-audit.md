@@ -105,14 +105,13 @@ corrected in the current codebase.
 | `session://user-availability` resource | P1 step 6 | P2 |
 | `hitl_elicit_form` (MCP elicitation, form mode) | P1 step 7 | P2 |
 | `hitl_elicit_url` (MCP elicitation, URL mode) | P1 step 8 | pre-1.1 |
-| Question lifecycle status field (`queued → asking → answered | timed_out | cancelled`) | P1 step 5 | Partial — `HITLRequest.status` tracks `pending/answered/cancelled/minimized`; `timed_out` not a distinct status |
+| Question lifecycle status field (`queued → asking → answered \| timed_out \| cancelled`) | P1 step 5 | Partial — `HITLRequest.status` tracks `pending/answered/cancelled/minimized`; `timed_out` not a distinct status |
 
 ### Env var naming note
 
-The spec uses `HITL_DEFAULT_WAIT_MIN` / `HITL_MIN_WAIT_MIN` / `HITL_MAX_WAIT_MIN`
-(with `_MIN` suffix). The implementation uses `HITL_DEFAULT_WAIT` / `HITL_MIN_WAIT` /
-`HITL_MAX_WAIT` (without suffix). The shorter names are cleaner and already
-documented in `timeout_config.py`. The spec names are aliases — no migration needed.
+The implementation uses `HITL_DEFAULT_WAIT_MIN` / `HITL_MIN_WAIT_MIN` / `HITL_MAX_WAIT_MIN`
+(with `_MIN` suffix), matching the spec contract exactly. These are the canonical names
+documented in `timeout_config.py`.
 
 ---
 

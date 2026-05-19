@@ -111,7 +111,10 @@ async def tui_enqueue(
     # Best-effort OS desktop notification so user knows a question is waiting
     _notif_title = f"HITL: {tool}"
     _notif_body = (params.get("message") or tool)[:120]
-    send_os_notification(_notif_title, _notif_body, "info")
+    _notif_task = asyncio.create_task(
+        asyncio.to_thread(send_os_notification, _notif_title, _notif_body, "info")
+    )
+    _notif_task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
 
     if _tui_app is not None:
         project_id = params.get("project_id")
