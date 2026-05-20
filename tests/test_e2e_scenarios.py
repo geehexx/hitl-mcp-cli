@@ -12,6 +12,17 @@ from hitl_mcp_cli.server import configure_tui_mode, mcp
 from hitl_mcp_cli.tui.queue import HITLQueue
 
 
+@pytest.fixture(autouse=True)
+def _pin_timeout_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HITL_MIN_WAIT_MIN", "0")
+    monkeypatch.setenv("HITL_DEFAULT_WAIT_MIN", "0.1")
+    import hitl_mcp_cli.timeout_config as tc
+
+    tc._config = None
+    yield
+    tc._config = None
+
+
 @pytest.fixture
 async def tui_queue() -> HITLQueue:
     queue = HITLQueue()
@@ -121,13 +132,8 @@ class TestTimeoutRecovery:
 
     @pytest.mark.asyncio
     async def test_timeout_then_success(self, mcp_client: Client, tui_queue: HITLQueue) -> None:
-        r1 = await mcp_client.call_tool("hitl_confirm", {"message": "Slow op?", "timeout_seconds": 1})
-        assert r1.data["timed_out"] is True
-
-        # Drain any stale request left in queue from the timed-out call
-        if tui_queue.size > 0:
-            stale = await tui_queue.get()
-            tui_queue.resolve(stale, {"action": "cancel"})
+        r1 = await mcp_client.call_tool("hitl_confirm", {"message": "Slow op?", "max_wait_minutes": 0.02})
+        assert r1.data["status"] == "timeout"
 
         task = _resolve_with(tui_queue, "recovered")
         r2 = await mcp_client.call_tool("hitl_collect", {"message": "Name:"})
@@ -138,12 +144,8 @@ class TestTimeoutRecovery:
     async def test_multiple_timeouts_then_success(self, mcp_client: Client, tui_queue: HITLQueue) -> None:
         """Server survives multiple consecutive timeouts."""
         for _ in range(3):
-            r = await mcp_client.call_tool("hitl_confirm", {"message": "Timeout?", "timeout_seconds": 1})
-            assert r.data["timed_out"] is True
-            # Drain stale queue entry
-            if tui_queue.size > 0:
-                stale = await tui_queue.get()
-                tui_queue.resolve(stale, {"action": "cancel"})
+            r = await mcp_client.call_tool("hitl_confirm", {"message": "Timeout?", "max_wait_minutes": 0.02})
+            assert r.data["status"] == "timeout"
 
         r = await mcp_client.call_tool("hitl_notify", {"message": "Still alive"})
         assert r.data == {"acknowledged": True}

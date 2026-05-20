@@ -47,6 +47,8 @@ class HITLRequest:
     # Status tracking (v0.9.0)
     status: str = "pending"  # "pending", "answered", "cancelled", "minimized"
     answer_preview: str = ""  # truncated answer for display
+    # Full answer stored on resolution (used by hitl_poll)
+    resolved_answer: Any = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         self.params = _sanitize_params(self.params)
@@ -132,9 +134,15 @@ class HITLQueue:
             self._queue.put_nowait(item)
 
     async def get(self) -> HITLRequest:
-        """Dequeue the next highest-priority request. Awaits if empty."""
-        _, _, request = await self._queue.get()
-        return request
+        """Dequeue the next highest-priority request. Awaits if empty.
+
+        Skips requests whose futures are already done (cancelled by wait_for
+        timeout) — those are stale and should not be dispatched to the TUI.
+        """
+        while True:
+            _, _, request = await self._queue.get()
+            if not request.future.done():
+                return request
 
     def resolve(self, request: HITLRequest, result: Any) -> None:
         """Resolve a request's future with the user's response.
@@ -145,6 +153,10 @@ class HITLQueue:
         run_coroutine_threadsafe is wrong here — it's for scheduling
         coroutines, not resolving existing futures.
         """
+        if (
+            request.resolved_answer is None
+        ):  # first-write-wins; cache before done-check so hitl_poll can report it
+            request.resolved_answer = result
         if request.future.done():
             return
         loop = self._caller_loop

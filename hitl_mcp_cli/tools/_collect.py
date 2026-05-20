@@ -13,10 +13,12 @@ immediately with ``{"action": "deferred", "urgency": urgency}``.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from pathlib import Path
 from typing import Any, Literal, cast
+from uuid import uuid4
 
 from .._server_core import (
     Context,
@@ -27,6 +29,7 @@ from .._server_core import (
 )
 from .._server_core import mcp as _mcp
 from ..interaction_log import ResultType, log_interaction
+from ..timeout_config import get_timeout_config
 
 _DEFERRED_QUESTIONS_LOG = Path.home() / ".local" / "state" / "hitl-deferred-questions.jsonl"
 
@@ -75,8 +78,9 @@ async def _collect_impl(
     step: int | None,
     total_steps: int | None,
     urgency: Literal["blocking", "soon", "fyi"],
+    max_wait_minutes: float | None,
     ctx: Context | None,
-) -> str | dict[str, str]:
+) -> str | dict[str, Any]:
     """Shared implementation for ``hitl_collect`` and ``hitl_ask``."""
     # Morning-batch: defer non-blocking questions when TUI is unavailable
     if urgency in ("soon", "fyi") and get_tui_queue() is None:
@@ -94,26 +98,36 @@ async def _collect_impl(
     t0 = time.monotonic()
     client_name = get_client_name(ctx, agent_name)
     session_id = get_session_id(ctx)
-    result = await tui_enqueue(
-        "hitl_collect",
-        {
-            "message": message,
-            "input_type": input_type,
-            "default": default,
-            "validation_pattern": validation_pattern,
-            "validation_message": validation_message,
-            "notes": notes,
-            "context": context,
-            "strip_whitespace": strip_whitespace,
-            "required": required,
-            "path_type": path_type,
-            "project_id": project_id,
-            "step": step,
-            "total_steps": total_steps,
-        },
-        client_name=client_name,
-        session_id=session_id,
-    )
+    question_id = str(uuid4())
+    tui_params = {
+        "message": message,
+        "input_type": input_type,
+        "default": default,
+        "validation_pattern": validation_pattern,
+        "validation_message": validation_message,
+        "notes": notes,
+        "context": context,
+        "strip_whitespace": strip_whitespace,
+        "required": required,
+        "path_type": path_type,
+        "project_id": project_id,
+        "step": step,
+        "total_steps": total_steps,
+        "_question_id": question_id,
+    }
+
+    cfg = get_timeout_config()
+    wait_seconds = cfg.clamp(max_wait_minutes) * 60
+    try:
+        result = await asyncio.wait_for(
+            tui_enqueue("hitl_collect", tui_params, client_name=client_name, session_id=session_id),
+            timeout=wait_seconds,
+        )
+    except TimeoutError:
+        ms = int((time.monotonic() - t0) * 1000)
+        log_interaction(tool, ms, "timeout", message=message, notes=notes)
+        return {"status": "timeout", "question_id": question_id, "retry_after": 60}
+
     out: str | dict[str, str] = result
     if isinstance(result, str):
         s = result.strip() if strip_whitespace else result
@@ -152,8 +166,9 @@ async def hitl_collect(
     step: int | None = None,
     total_steps: int | None = None,
     urgency: Literal["blocking", "soon", "fyi"] = "blocking",
+    max_wait_minutes: float | None = None,
     ctx: Context | None = None,
-) -> str | dict[str, str]:
+) -> str | dict[str, Any]:
     """Collect a single input value from the user. Blocks until the user responds.
 
     Args:
@@ -196,6 +211,7 @@ async def hitl_collect(
         step=step,
         total_steps=total_steps,
         urgency=urgency,
+        max_wait_minutes=max_wait_minutes,
         ctx=ctx,
     )
 
@@ -217,8 +233,9 @@ async def hitl_ask(
     step: int | None = None,
     total_steps: int | None = None,
     urgency: Literal["blocking", "soon", "fyi"] = "blocking",
+    max_wait_minutes: float | None = None,
     ctx: Context | None = None,
-) -> str | dict[str, str]:
+) -> str | dict[str, Any]:
     """Alias for :func:`hitl_collect`. Use whichever name reads more naturally."""
     return await _collect_impl(
         "hitl_ask",
@@ -237,6 +254,7 @@ async def hitl_ask(
         step=step,
         total_steps=total_steps,
         urgency=urgency,
+        max_wait_minutes=max_wait_minutes,
         ctx=ctx,
     )
 
@@ -256,6 +274,7 @@ async def hitl_choose(
     step: int | None = None,
     total_steps: int | None = None,
     urgency: Literal["blocking", "soon", "fyi"] = "blocking",
+    max_wait_minutes: float | None = None,
     ctx: Context | None = None,
 ) -> str | list[str] | dict[str, str] | dict[str, Any]:
     """Present a list of options for the user to select from.
@@ -311,25 +330,35 @@ async def hitl_choose(
     t0 = time.monotonic()
     client_name = get_client_name(ctx, agent_name)
     session_id = get_session_id(ctx)
+    question_id = str(uuid4())
 
     auto_fuzzy = fuzzy_search if fuzzy_search is not None else (len(choices) > 15)
-    result = await tui_enqueue(
-        "hitl_choose",
-        {
-            "message": message,
-            "choices": choices,
-            "multiple": multiple,
-            "fuzzy_search": auto_fuzzy,
-            "default": default,
-            "notes": notes,
-            "context": context,
-            "project_id": project_id,
-            "step": step,
-            "total_steps": total_steps,
-        },
-        client_name=client_name,
-        session_id=session_id,
-    )
+    tui_params = {
+        "message": message,
+        "choices": choices,
+        "multiple": multiple,
+        "fuzzy_search": auto_fuzzy,
+        "default": default,
+        "notes": notes,
+        "context": context,
+        "project_id": project_id,
+        "step": step,
+        "total_steps": total_steps,
+        "_question_id": question_id,
+    }
+
+    cfg = get_timeout_config()
+    wait_seconds = cfg.clamp(max_wait_minutes) * 60
+    try:
+        result = await asyncio.wait_for(
+            tui_enqueue("hitl_choose", tui_params, client_name=client_name, session_id=session_id),
+            timeout=wait_seconds,
+        )
+    except TimeoutError:
+        ms = int((time.monotonic() - t0) * 1000)
+        log_interaction("hitl_choose", ms, "timeout", message=message, notes=notes)
+        return {"status": "timeout", "question_id": question_id, "retry_after": 60}
+
     ms = int((time.monotonic() - t0) * 1000)
     log_interaction("hitl_choose", ms, "value", message=message, result=str(result)[:80], notes=notes)
     if display_to_value and isinstance(result, str):

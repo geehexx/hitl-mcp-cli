@@ -40,3 +40,34 @@ def queue_history() -> str:
             }
         )
     return json.dumps({"history": rows, "count": len(rows)}, indent=2)
+
+
+@_mcp.resource("queue://history/{n}", mime_type="application/json")
+def queue_history_n(n: int) -> str:
+    """Return JSON snapshot of the N most-recent HITL requests (max 50).
+
+    Args:
+        n: Number of entries to return. Clamped to [1, 50].
+    """
+    queue = get_tui_queue()
+    if queue is None:
+        return json.dumps({"history": [], "warning": "TUI queue not configured"})
+
+    limit = max(1, min(n, 50))
+    now = time.monotonic()
+    rows: list[dict[str, Any]] = []
+    for req in queue.history[-limit:][::-1]:
+        msg = req.params.get("message", "")
+        rows.append(
+            {
+                "request_id": req.request_id,
+                "tool": req.tool,
+                "message": (msg[:120] + "...") if len(msg) > 120 else msg,
+                "status": req.status,
+                "answer_preview": req.answer_preview,
+                "elapsed_seconds": int(now - req.created_at),
+                "client_name": req.params.get("_client_name"),
+                "project_id": req.params.get("project_id"),
+            }
+        )
+    return json.dumps({"history": rows, "count": len(rows)}, indent=2)

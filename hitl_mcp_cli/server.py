@@ -42,6 +42,7 @@ from ._server_core import (
 from .tools._collect import hitl_ask, hitl_choose, hitl_collect
 from .tools._confirm import hitl_confirm
 from .tools._notify import hitl_notify
+from .tools._poll import hitl_poll
 
 __all__ = [
     "_get_client_name",
@@ -54,6 +55,7 @@ __all__ = [
     "hitl_collect",
     "hitl_confirm",
     "hitl_notify",
+    "hitl_poll",
     "mcp",
 ]
 

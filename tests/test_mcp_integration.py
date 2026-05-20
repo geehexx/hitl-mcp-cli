@@ -56,9 +56,19 @@ class TestMCPProtocol:
     @pytest.mark.asyncio
     async def test_tools_list_response(self, mcp_client: Client) -> None:
         tools = await mcp_client.list_tools()
-        assert len(tools) == 5
+        assert len(tools) == 9
         tool_names = {tool.name for tool in tools}
-        assert tool_names == {"hitl_collect", "hitl_ask", "hitl_choose", "hitl_confirm", "hitl_notify"}
+        assert tool_names == {
+            "hitl_collect",
+            "hitl_ask",
+            "hitl_choose",
+            "hitl_confirm",
+            "hitl_notify",
+            "hitl_poll",
+            "hitl_recommend",
+            "hitl_reject_question",
+            "hitl_request_elaboration",
+        }
         for tool in tools:
             assert tool.name is not None
             assert tool.description is not None

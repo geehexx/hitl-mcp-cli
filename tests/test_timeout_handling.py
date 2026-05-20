@@ -11,6 +11,17 @@ from hitl_mcp_cli.server import configure_tui_mode, mcp
 from hitl_mcp_cli.tui.queue import HITLQueue
 
 
+@pytest.fixture(autouse=True)
+def _pin_timeout_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HITL_MIN_WAIT_MIN", "0")
+    monkeypatch.setenv("HITL_DEFAULT_WAIT_MIN", "0.1")
+    import hitl_mcp_cli.timeout_config as tc
+
+    tc._config = None
+    yield
+    tc._config = None
+
+
 @pytest.fixture
 async def tui_queue() -> HITLQueue:
     queue = HITLQueue()
@@ -27,9 +38,10 @@ async def mcp_client(tui_queue: HITLQueue) -> Client:
 
 @pytest.mark.asyncio
 async def test_hitl_confirm_timeout_returns_decline(mcp_client: Client, tui_queue: HITLQueue) -> None:
-    """hitl_confirm with timeout_seconds=1 and no resolution → timed_out: true."""
-    result = await mcp_client.call_tool("hitl_confirm", {"message": "Deploy?", "timeout_seconds": 1})
-    assert result.data == {"action": "decline", "timed_out": True}
+    """hitl_confirm with max_wait_minutes=0.02 and no resolution → timeout shape."""
+    result = await mcp_client.call_tool("hitl_confirm", {"message": "Deploy?", "max_wait_minutes": 0.02})
+    assert result.data["status"] == "timeout"
+    assert "question_id" in result.data
 
 
 @pytest.mark.asyncio
@@ -41,7 +53,7 @@ async def test_hitl_confirm_no_timeout_when_fast(mcp_client: Client, tui_queue: 
         tui_queue.resolve(req, {"action": "accept"})
 
     task = asyncio.create_task(_resolve())
-    result = await mcp_client.call_tool("hitl_confirm", {"message": "Continue?", "timeout_seconds": 10})
+    result = await mcp_client.call_tool("hitl_confirm", {"message": "Continue?", "max_wait_minutes": 5})
     await task
     assert result.data == {"action": "accept", "timed_out": False}
 
@@ -78,20 +90,15 @@ async def test_multiple_sequential_calls(mcp_client: Client, tui_queue: HITLQueu
 @pytest.mark.asyncio
 async def test_server_healthy_after_timeout(mcp_client: Client, tui_queue: HITLQueue) -> None:
     """Server still accepts calls after a timeout."""
-    r1 = await mcp_client.call_tool("hitl_confirm", {"message": "Slow?", "timeout_seconds": 1})
-    assert r1.data["timed_out"] is True
-
-    # Drain stale queue entry from timed-out call
-    if tui_queue.size > 0:
-        stale = await tui_queue.get()
-        tui_queue.resolve(stale, {"action": "cancel"})
+    r1 = await mcp_client.call_tool("hitl_confirm", {"message": "Slow?", "max_wait_minutes": 0.02})
+    assert r1.data["status"] == "timeout"
 
     async def _resolve() -> None:
         req = await tui_queue.get()
         tui_queue.resolve(req, "healthy")
 
     task = asyncio.create_task(_resolve())
-    r2 = await mcp_client.call_tool("hitl_collect", {"message": "Name:"})
+    r2 = await mcp_client.call_tool("hitl_collect", {"message": "Name:", "max_wait_minutes": 5})
     await task
     assert r2.data == "healthy"
 
