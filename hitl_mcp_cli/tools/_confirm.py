@@ -73,8 +73,11 @@ async def hitl_confirm(
     # max_wait_minutes takes precedence over legacy timeout_seconds.
     # When neither is set, apply the process-wide default_wait so the tool
     # never waits indefinitely by accident.
+    # NOTE: timeout_seconds == 0 is the legacy "infinite wait" sentinel — do NOT
+    # route it to the new timeout path; that would silently change behavior for
+    # existing callers. Only use the new path when max_wait_minutes is explicit.
     cfg = get_timeout_config()
-    if max_wait_minutes is not None or timeout_seconds == 0:
+    if max_wait_minutes is not None:
         wait_seconds = cfg.clamp(max_wait_minutes) * 60
         question_id = str(uuid4())
         tui_params["_question_id"] = question_id
